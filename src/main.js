@@ -1,7 +1,10 @@
 import './style.css'
+import { mountControlsHelp } from './controls-help.js'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep } from 'three/tsl'
+
+mountControlsHelp(document.querySelector('#app'));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe6f2e0);

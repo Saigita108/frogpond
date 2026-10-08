@@ -11,3 +11,152 @@ body {
 canvas {
   display: block;
 }
+
+.controls-help {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 10;
+  color: #234234;
+}
+
+.controls-help button {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.controls-help .info-button {
+  display: block;
+  margin-left: auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #cad8c4;
+  border-radius: 50%;
+  background: #fcfdf7;
+  box-shadow: 0 4px 14px #23423414;
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-style: italic;
+}
+
+.controls-help .info-button:hover,
+.controls-help .close-button:hover {
+  background: #e8efdf;
+}
+
+.controls-panel {
+  box-sizing: border-box;
+  width: min(350px, calc(100vw - 32px));
+  max-height: calc(100dvh - 100px);
+  overflow-y: auto;
+  margin-top: 12px;
+  padding: 22px;
+  background: #fcfdf7;
+  border: 1px solid #cad8c4;
+  border-radius: 20px;
+  box-shadow: 0 12px 36px #23423424;
+}
+
+.controls-panel[hidden] {
+  display: none;
+}
+
+.controls-panel-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.device-toggle {
+  display: flex;
+  flex: 1;
+  padding: 4px;
+  border-radius: 12px;
+  background: #e9efdf;
+}
+
+.device-toggle button {
+  flex: 1;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.device-toggle button[aria-pressed="true"] {
+  background: #365d42;
+  color: white;
+}
+
+.controls-help .close-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 24px;
+}
+
+.controls-panel h2 {
+  margin: 22px 0 6px;
+  font-size: 20px;
+}
+
+.controls-intro,
+.shortcut-list dd {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #62735f;
+}
+
+.controls-intro {
+  margin: 0 0 18px;
+}
+
+.shortcut-list {
+  margin: 0;
+}
+
+.shortcut-list > div {
+  padding: 12px 0;
+  border-top: 1px solid #e3e9dc;
+}
+
+.shortcut-list dt {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shortcut-list dd {
+  margin: 0;
+}
+
+.controls-help kbd {
+  padding: 2px 5px;
+  border: 1px solid #d5decf;
+  border-radius: 4px;
+  background: #f0f4e9;
+  font-size: 11px;
+}
+
+.controls-footer {
+  margin: 16px 0 0;
+  color: #62735f;
+  font-size: 11px;
+}
+
+.controls-help button:focus-visible {
+  outline: 2px solid #438d9b;
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .controls-help {
+    top: 16px;
+    right: 16px;
+  }
+}
