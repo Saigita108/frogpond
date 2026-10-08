@@ -1,7 +1,10 @@
 import './style.css'
+import { mountControlsHelp } from './controls-help.js'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { Fn, float, vec2, vec3, uv, time, sin, cos, mod, length, pow, abs, clamp } from 'three/tsl'
+import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep } from 'three/tsl'
+
+mountControlsHelp(document.querySelector('#app'));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe6f2e0);
@@ -108,51 +111,112 @@ const waterGeometry = new THREE.ShapeGeometry(
 );
 waterGeometry.rotateX(-Math.PI / 2);
 
-// Tileable Water Caustic by David Hoskins; original turbulence by joltz0r.
-// Shadertoy source: https://www.shadertoy.com/view/MdlXz8
-// Ported from the supplied GLSL to TSL for the WebGPU renderer.
-const waterCaustics = Fn(() => {
-  const tau = 6.28318530718;
-  const iterations = 5;
-  const intensity = 0.005;
-  const shaderTime = time.mul(0.5).add(23).toVar();
-  // ShapeGeometry UVs are shape coordinates: normalize, then repeat the tile.
-  const waterRepeats = 4; // Increase for smaller, more frequent caustics.
-  const waterUV = uv().div(6.8).add(0.5).mul(waterRepeats);
-  const p = mod(waterUV.mul(tau), tau).sub(250).toVar();
-  const swirl = vec2(p).toVar();
-  const c = float(1).toVar();
+// Each slot stores a click's shape UV coordinates, start time, and active flag.
+const rippleStartedAt = performance.now();
+const rippleTime = uniform(0);
+const rippleLifetime = 0.9;
+const ripples = Array.from({ length: 8 }, () => uniform(new THREE.Vector4(0, 0, 0, 0)));
+let nextRipple = 0;
 
-  for (let n = 0; n < iterations; n++) {
-    const t = shaderTime.mul(1 - 3.5 / (n + 1));
-    swirl.assign(p.add(vec2(
-      cos(t.sub(swirl.x)).add(sin(t.add(swirl.y))),
-      sin(t.sub(swirl.y)).add(cos(t.add(swirl.x)))
-    )));
-    // Multiplying by intensity/sin is equivalent to the original divisions.
-    const turbulence = vec2(
-      p.x.mul(intensity).div(sin(swirl.x.add(t))),
-      p.y.mul(intensity).div(cos(swirl.y.add(t)))
-    );
-    c.addAssign(float(1).div(length(turbulence).max(0.000001)));
+const waterRipples = Fn(() => {
+  const distortion = vec2(0).toVar();
+  const lighting = float(0).toVar();
+
+  for (const ripple of ripples) {
+    const age = rippleTime.sub(ripple.z).max(0);
+    const delta = uv().sub(ripple.xy);
+    const distance = length(delta);
+    const front = distance.sub(age.mul(0.8));
+    const fade = float(1).sub(age.div(rippleLifetime)).clamp(0, 1)
+      .mul(smoothstep(0, 0.08, age)).mul(ripple.w);
+    const envelope = exp(front.mul(8).pow(2).negate()).mul(fade.pow(2));
+    const phase = front.mul(38);
+
+    // Expanding wave packets distort the texture and add bright/dark rings.
+    distortion.addAssign(delta.div(distance.max(0.001))
+      .mul(sin(phase)).mul(envelope).mul(0.035));
+    lighting.addAssign(cos(phase).mul(envelope).mul(0.16));
   }
 
-  c.divAssign(iterations);
-  c.assign(float(1.17).sub(pow(c, 1.4)));
-  const highlights = vec3(pow(abs(c), 8));
-  return clamp(highlights.add(vec3(0, 0.35, 0.5)), 0, 1);
+  return vec3(distortion, lighting);
+});
+
+// 2D Top Down Water
+// Shadertoy source: https://www.shadertoy.com/view/wt2GRt
+// Ported from the supplied GLSL to TSL for the WebGPU renderer.
+const topDownWater = Fn(() => {
+  const ripple = waterRipples().toVar();
+  // ShapeGeometry UVs are shape coordinates: normalize, then repeat the tile.
+  const waterRepeats = 4; // Increase for a smaller water pattern.
+  const waterUV = uv().add(ripple.xy).div(6.8).add(0.5).mul(waterRepeats);
+  const background = vec3(0.192156862745098, 0.6627450980392157, 0.9333333333333333);
+  // Only k.xyw is used in the original shader; store it as a vec3.
+  const k = vec3(waterUV.mul(7), time.mul(0.8)).toVar();
+  const transform = mat3(
+    vec3(-2, -1, 0),
+    vec3(3, -1, 1),
+    vec3(1, -1, -1)
+  );
+
+  // Preserve the original vector * matrix order and three successive updates.
+  k.assign(k.mul(transform));
+  const val1 = length(float(0.5).sub(fract(k.mul(0.5)))).toVar();
+  k.assign(k.mul(transform));
+  const val2 = length(float(0.5).sub(fract(k.mul(0.2)))).toVar();
+  k.assign(k.mul(transform));
+  const val3 = length(float(0.5).sub(fract(k.mul(0.5)))).toVar();
+  const highlights = pow(min(min(val1, val2), val3), 7).mul(3);
+  return background.add(vec3(highlights)).add(vec3(ripple.z)).max(0);
 });
 
 const waterMaterial = new THREE.MeshBasicNodeMaterial({
   side: THREE.DoubleSide,
   toneMapped: false
 });
-waterMaterial.colorNode = waterCaustics();
+waterMaterial.colorNode = topDownWater();
 
 const water = new THREE.Mesh(waterGeometry, waterMaterial);
 
 water.position.y = 0.025;
 scene.add(water);
+
+const waterRaycaster = new THREE.Raycaster();
+const pointerPosition = new THREE.Vector2();
+let waterClick = null;
+const hasRotationModifier = (event) => event.shiftKey || event.ctrlKey || event.metaKey;
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+  waterClick = event.button === 0 && !hasRotationModifier(event)
+    ? { id: event.pointerId, x: event.clientX, y: event.clientY }
+    : null;
+});
+
+renderer.domElement.addEventListener('pointerup', (event) => {
+  const click = waterClick;
+  waterClick = null;
+  if (!click || event.pointerId !== click.id || event.button !== 0 || hasRotationModifier(event)) return;
+  if (Math.hypot(event.clientX - click.x, event.clientY - click.y) > 5) return;
+
+  const bounds = renderer.domElement.getBoundingClientRect();
+  pointerPosition.set(
+    ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+    -((event.clientY - bounds.top) / bounds.height) * 2 + 1
+  );
+  camera.updateMatrixWorld(true);
+  water.updateMatrixWorld(true);
+  waterRaycaster.setFromCamera(pointerPosition, camera);
+  const hit = waterRaycaster.intersectObject(water, false)[0];
+  if (!hit?.uv) return;
+
+  ripples[nextRipple].value.set(
+    hit.uv.x, hit.uv.y, (performance.now() - rippleStartedAt) / 1000, 1
+  );
+  nextRipple = (nextRipple + 1) % ripples.length;
+});
+
+renderer.domElement.addEventListener('pointercancel', () => {
+  waterClick = null;
+});
 
 // Keep the island within 90% of the viewport at every screen size.
 function fitPondToScreen() {
@@ -215,13 +279,79 @@ fitPondToScreen();
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
-controls.enableZoom = false;
+controls.enableZoom = true;
+controls.zoomSpeed = 0.8;
+controls.minDistance = 3;
+controls.maxDistance = 40;
 controls.maxPolarAngle = Math.PI / 2 - 0.1;
 // OrbitControls switches PAN to rotation when Shift is held.
 // With panning disabled, an ordinary left drag has no effect.
 controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
 controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
 controls.mouseButtons.RIGHT = null;
+
+const trackpadOrbit = new THREE.Spherical();
+const trackpadOffset = new THREE.Vector3();
+let trackpadPinch = null;
+
+renderer.domElement.addEventListener('wheel', (event) => {
+  if (!controls.enabled) return;
+  // Safari can also send wheel events during its native pinch gesture.
+  if (trackpadPinch) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+  // Ctrl+wheel represents a trackpad pinch: let OrbitControls zoom.
+  if (event.ctrlKey || event.deltaMode !== 0) return;
+
+  // WheelEvent has no device identifier. Keep typical discrete mouse-wheel
+  // steps as zoom; treat smooth pixel scrolling as two-finger rotation.
+  const discreteWheel = event.deltaX === 0 && (
+    Math.abs(event.wheelDeltaY) === 120 ||
+    (Math.abs(event.deltaY) >= 100 && event.deltaY % 100 === 0)
+  );
+  if (discreteWheel) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (!controls.enableRotate) return;
+
+  trackpadOffset.copy(camera.position).sub(controls.target);
+  trackpadOrbit.setFromVector3(trackpadOffset);
+  trackpadOrbit.theta += event.deltaX * 0.004;
+  trackpadOrbit.phi = THREE.MathUtils.clamp(
+    trackpadOrbit.phi + event.deltaY * 0.004,
+    Math.max(0.02, controls.minPolarAngle),
+    controls.maxPolarAngle
+  );
+  camera.position.copy(controls.target).add(trackpadOffset.setFromSpherical(trackpadOrbit));
+  controls.update();
+}, { capture: true, passive: false });
+
+// Safari exposes trackpad pinches through GestureEvent rather than Ctrl+wheel.
+renderer.domElement.addEventListener('gesturestart', (event) => {
+  if (!controls.enabled || !controls.enableZoom) return;
+  event.preventDefault();
+  trackpadPinch = { distance: controls.getDistance(), scale: event.scale };
+}, { passive: false });
+
+renderer.domElement.addEventListener('gesturechange', (event) => {
+  if (!trackpadPinch) return;
+  event.preventDefault();
+  const distance = THREE.MathUtils.clamp(
+    trackpadPinch.distance / Math.pow(event.scale / trackpadPinch.scale, controls.zoomSpeed),
+    controls.minDistance, controls.maxDistance
+  );
+  trackpadOffset.copy(camera.position).sub(controls.target).setLength(distance);
+  camera.position.copy(controls.target).add(trackpadOffset);
+  controls.update();
+}, { passive: false });
+
+renderer.domElement.addEventListener('gestureend', (event) => {
+  if (trackpadPinch) event.preventDefault();
+  trackpadPinch = null;
+}, { passive: false });
 
 renderer.domElement.addEventListener('pointerdown', (event) => {
   if (event.button === 1) {
@@ -242,5 +372,6 @@ controls.addEventListener('change', () => {
 
 // Continuous rendering updates the shader's time uniform even while idle.
 renderer.setAnimationLoop(() => {
+  rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
   renderer.render(scene, camera);
 });
