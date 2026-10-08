@@ -1,6 +1,7 @@
 import './style.css'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { Fn, float, vec2, vec3, uv, time, sin, cos, mod, length, pow, abs, clamp } from 'three/tsl'
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe6f2e0);
@@ -34,7 +35,6 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   fitPondToScreen();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.render(scene, camera);
 });
 
 // LOW-POLY DUCK POND
@@ -108,15 +108,48 @@ const waterGeometry = new THREE.ShapeGeometry(
 );
 waterGeometry.rotateX(-Math.PI / 2);
 
-const water = new THREE.Mesh(
-  waterGeometry,
-  new THREE.MeshStandardMaterial({
-    color: 0x79cbd4,
-    roughness: 0.45,
-    flatShading: true,
-    side: THREE.DoubleSide
-  })
-);
+// Tileable Water Caustic by David Hoskins; original turbulence by joltz0r.
+// Shadertoy source: https://www.shadertoy.com/view/MdlXz8
+// Ported from the supplied GLSL to TSL for the WebGPU renderer.
+const waterCaustics = Fn(() => {
+  const tau = 6.28318530718;
+  const iterations = 5;
+  const intensity = 0.005;
+  const shaderTime = time.mul(0.5).add(23).toVar();
+  // ShapeGeometry UVs are shape coordinates: normalize, then repeat the tile.
+  const waterRepeats = 4; // Increase for smaller, more frequent caustics.
+  const waterUV = uv().div(6.8).add(0.5).mul(waterRepeats);
+  const p = mod(waterUV.mul(tau), tau).sub(250).toVar();
+  const swirl = vec2(p).toVar();
+  const c = float(1).toVar();
+
+  for (let n = 0; n < iterations; n++) {
+    const t = shaderTime.mul(1 - 3.5 / (n + 1));
+    swirl.assign(p.add(vec2(
+      cos(t.sub(swirl.x)).add(sin(t.add(swirl.y))),
+      sin(t.sub(swirl.y)).add(cos(t.add(swirl.x)))
+    )));
+    // Multiplying by intensity/sin is equivalent to the original divisions.
+    const turbulence = vec2(
+      p.x.mul(intensity).div(sin(swirl.x.add(t))),
+      p.y.mul(intensity).div(cos(swirl.y.add(t)))
+    );
+    c.addAssign(float(1).div(length(turbulence).max(0.000001)));
+  }
+
+  c.divAssign(iterations);
+  c.assign(float(1.17).sub(pow(c, 1.4)));
+  const highlights = vec3(pow(abs(c), 8));
+  return clamp(highlights.add(vec3(0, 0.35, 0.5)), 0, 1);
+});
+
+const waterMaterial = new THREE.MeshBasicNodeMaterial({
+  side: THREE.DoubleSide,
+  toneMapped: false
+});
+waterMaterial.colorNode = waterCaustics();
+
+const water = new THREE.Mesh(waterGeometry, waterMaterial);
 
 water.position.y = 0.025;
 scene.add(water);
@@ -205,7 +238,9 @@ renderer.domElement.addEventListener('auxclick', (event) => {
 
 controls.addEventListener('change', () => {
   centerPondInView();
-  renderer.render(scene, camera);
 });
 
-renderer.render(scene, camera);
+// Continuous rendering updates the shader's time uniform even while idle.
+renderer.setAnimationLoop(() => {
+  renderer.render(scene, camera);
+});
