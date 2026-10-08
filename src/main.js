@@ -1,5 +1,6 @@
 import './style.css'
-import * as THREE from 'three'
+import * as THREE from 'three/webgpu'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe6f2e0);
@@ -13,10 +14,15 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(9, 10, 12);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGPURenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.querySelector('#app').appendChild(renderer.domElement);
+
+// Initialize the GPU backend before rendering or accepting input.
+await renderer.init();
+camera.coordinateSystem = renderer.coordinateSystem;
+camera.updateProjectionMatrix();
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x526342, 2));
 const sunlight = new THREE.DirectionalLight(0xffffff, 3);
@@ -26,6 +32,7 @@ scene.add(sunlight);
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  fitPondToScreen();
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.render(scene, camera);
 });
@@ -113,5 +120,92 @@ const water = new THREE.Mesh(
 
 water.position.y = 0.025;
 scene.add(water);
+
+// Keep the island within 90% of the viewport at every screen size.
+function fitPondToScreen() {
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const verticalSlope = Math.tan(verticalFov / 2) * 0.9;
+  const horizontalSlope = verticalSlope * camera.aspect;
+  const viewRotation = camera.quaternion.clone().invert();
+  const vertex = new THREE.Vector3();
+  let distance = 0;
+
+  for (const mesh of [grass, waterEdge, water]) {
+    mesh.updateMatrixWorld(true);
+    const positions = mesh.geometry.attributes.position;
+
+    for (let i = 0; i < positions.count; i++) {
+      vertex.fromBufferAttribute(positions, i)
+        .applyMatrix4(mesh.matrixWorld)
+        .applyQuaternion(viewRotation);
+      distance = Math.max(
+        distance,
+        vertex.z + Math.abs(vertex.x) / horizontalSlope,
+        vertex.z + Math.abs(vertex.y) / verticalSlope
+      );
+    }
+  }
+
+  camera.position.normalize().multiplyScalar(distance);
+  camera.lookAt(0, 0, 0);
+  centerPondInView();
+}
+
+function centerPondInView() {
+  camera.clearViewOffset();
+  camera.updateMatrixWorld(true);
+
+  // Center the projected outline, since perspective shifts its visual center.
+  const vertex = new THREE.Vector3();
+  const bounds = new THREE.Box2();
+  for (const mesh of [grass, waterEdge, water]) {
+    const positions = mesh.geometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      vertex.fromBufferAttribute(positions, i)
+        .applyMatrix4(mesh.matrixWorld)
+        .project(camera);
+      bounds.expandByPoint(new THREE.Vector2(vertex.x, vertex.y));
+    }
+  }
+
+  const center = bounds.getCenter(new THREE.Vector2());
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  camera.setViewOffset(
+    width, height,
+    center.x * width / 2, -center.y * height / 2,
+    width, height
+  );
+}
+
+fitPondToScreen();
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+controls.enableZoom = false;
+controls.maxPolarAngle = Math.PI / 2 - 0.1;
+// OrbitControls switches PAN to rotation when Shift is held.
+// With panning disabled, an ordinary left drag has no effect.
+controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
+controls.mouseButtons.RIGHT = null;
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+  if (event.button === 1) {
+    event.preventDefault();
+    controls.mouseButtons.MIDDLE = event.shiftKey || event.ctrlKey || event.metaKey
+      ? THREE.MOUSE.PAN
+      : THREE.MOUSE.ROTATE;
+  }
+}, { capture: true });
+
+renderer.domElement.addEventListener('auxclick', (event) => {
+  if (event.button === 1) event.preventDefault();
+});
+
+controls.addEventListener('change', () => {
+  centerPondInView();
+  renderer.render(scene, camera);
+});
 
 renderer.render(scene, camera);
