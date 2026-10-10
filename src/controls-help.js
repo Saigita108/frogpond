@@ -30,6 +30,8 @@ export function mountControlsHelp(app) {
       ['Zoom', 'Pinch two fingers together or apart.'],
       ['Make ripples', 'Click on the water.'],
       ['Frog jump', 'Press <kbd>Space</kbd>.'],
+      ['Frog walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
+      ['Frog turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>.'],
       ['Pan', 'Hold <kbd>Shift</kbd> and click-drag.']
     ],
     mouse: [
@@ -37,6 +39,8 @@ export function mountControlsHelp(app) {
       ['Pan', 'Hold <kbd>Shift</kbd> and drag with the left mouse button.'],
       ['Zoom', 'Scroll the mouse wheel up or down.'],
       ['Frog jump', 'Press <kbd>Space</kbd>.'],
+      ['Frog walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
+      ['Frog turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>.'],
       ['Make ripples', 'Left-click on the water.']
     ]
   };

@@ -1,16 +1,18 @@
 import './style.css'
 import { mountControlsHelp } from './controls-help.js'
+import { addFireflies } from './fireflies.js'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import frogModelUrl from './assets/models/frog-eyes.glb?url'
 import frogJumpModelUrl from './assets/models/frog-jump-fixed.glb?url'
+import frogWalkModelUrl from './assets/models/frog-walk.glb?url'
 import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep } from 'three/tsl'
 
 mountControlsHelp(document.querySelector('#app'));
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xe6f2e0);
+scene.background = new THREE.Color(0x0b1733);
 
 const camera = new THREE.PerspectiveCamera(
   45,
@@ -92,7 +94,7 @@ grassGeometry.rotateX(-Math.PI / 2);
 const grass = new THREE.Mesh(
   grassGeometry,
   new THREE.MeshStandardMaterial({
-    color: 0x86b86a,
+    color: 0x527b46,
     flatShading: true
   })
 );
@@ -109,7 +111,7 @@ edgeGeometry.rotateX(-Math.PI / 2);
 const waterEdge = new THREE.Mesh(
   edgeGeometry,
   new THREE.MeshStandardMaterial({
-    color: 0x438d9b,
+    color: 0x295b6c,
     flatShading: true,
     side: THREE.DoubleSide
   })
@@ -162,7 +164,7 @@ const topDownWater = Fn(() => {
   // ShapeGeometry UVs are shape coordinates: normalize, then repeat the tile.
   const waterRepeats = 4; // Increase for a smaller water pattern.
   const waterUV = uv().add(ripple.xy).div(6.8).add(0.5).mul(waterRepeats);
-  const background = vec3(0.192156862745098, 0.6627450980392157, 0.9333333333333333);
+  const background = vec3(0.075, 0.29, 0.46);
   // Only k.xyw is used in the original shader; store it as a vec3.
   const k = vec3(waterUV.mul(7), time.mul(0.8)).toVar();
   const transform = mat3(
@@ -178,7 +180,7 @@ const topDownWater = Fn(() => {
   const val2 = length(float(0.5).sub(fract(k.mul(0.2)))).toVar();
   k.assign(k.mul(transform));
   const val3 = length(float(0.5).sub(fract(k.mul(0.5)))).toVar();
-  const highlights = pow(min(min(val1, val2), val3), 7).mul(3);
+  const highlights = pow(min(min(val1, val2), val3), 7).mul(1.8);
   return background.add(vec3(highlights)).add(vec3(ripple.z)).max(0);
 });
 
@@ -193,12 +195,25 @@ const water = new THREE.Mesh(waterGeometry, waterMaterial);
 water.position.y = 0.025;
 scene.add(water);
 
+const updateFireflies = addFireflies(scene);
+
 // Keep placement separate from the model's animated transforms.
 let frogMixer = null;
 let idleFrog = null;
 let jumpFrog = null;
 let frogJumpMixer = null;
 let frogIsJumping = false;
+let walkFrog = null;
+let frogWalkMixer = null;
+let frogWalkDirection = 0;
+const frogWalkActions = [];
+const frogKeys = new Set();
+const frogMovementKeys = new Set([
+  'KeyW', 'ArrowUp', 'KeyS', 'ArrowDown',
+  'KeyA', 'ArrowLeft', 'KeyD', 'ArrowRight'
+]);
+const frogWalkSpeed = 0.85;
+const frogTurnSpeed = Math.PI * 0.75;
 const frogJumpActions = [];
 const unfinishedJumpActions = new Set();
 const frogPlacement = new THREE.Group();
@@ -252,9 +267,61 @@ frogLoader.loadAsync(frogJumpModelUrl).then((gltf) => {
   console.error('Could not load the jump model:', error);
 });
 
+frogLoader.loadAsync(frogWalkModelUrl).then((gltf) => {
+  walkFrog = prepareFrog(gltf);
+  walkFrog.visible = false;
+  frogWalkMixer = new THREE.AnimationMixer(walkFrog);
+  for (const clip of gltf.animations) {
+    frogWalkActions.push(frogWalkMixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity));
+  }
+}).catch((error) => {
+  console.error('Could not load the walk model:', error);
+});
+
+function stopFrogWalk() {
+  frogWalkDirection = 0;
+  for (const action of frogWalkActions) action.stop();
+  if (walkFrog) walkFrog.visible = false;
+}
+
+function updateFrogMovement(delta) {
+  if (!idleFrog) return;
+  const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
+  const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
+  // Rotating the shared placement turns whichever model is currently visible.
+  frogPlacement.rotation.y += turn * frogTurnSpeed * delta;
+  if (frogIsJumping) return;
+
+  const direction = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
+  if (!direction || !walkFrog || frogWalkActions.length === 0) {
+    if (frogWalkDirection) stopFrogWalk();
+    idleFrog.visible = true;
+    return;
+  }
+
+  if (direction !== frogWalkDirection) {
+    for (const action of frogWalkActions) {
+      if (frogWalkDirection === 0) {
+        action.reset();
+        // Backward playback starts at the last frame of the walk cycle.
+        if (direction < 0) action.time = action.getClip().duration;
+      }
+      action.setEffectiveTimeScale(direction).setEffectiveWeight(1).play();
+    }
+    frogWalkDirection = direction;
+  }
+  idleFrog.visible = false;
+  walkFrog.visible = true;
+  frogWalkMixer.update(delta);
+  const distance = direction * frogWalkSpeed * delta;
+  frogPlacement.position.x += Math.sin(frogPlacement.rotation.y) * distance;
+  frogPlacement.position.z += Math.cos(frogPlacement.rotation.y) * distance;
+}
+
 function startFrogJump() {
   if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping) return;
   frogIsJumping = true;
+  stopFrogWalk();
   idleFrog.visible = false;
   jumpFrog.visible = true;
   unfinishedJumpActions.clear();
@@ -270,15 +337,27 @@ function finishFrogJump() {
   idleFrog.visible = true;
   jumpFrog.visible = false;
   for (const action of frogJumpActions) action.stop();
+  updateFrogMovement(0);
 }
 
 window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.defaultPrevented) return;
+  if ((!frogMovementKeys.has(event.code) && event.code !== 'Space') || event.defaultPrevented) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target?.isContentEditable || event.target?.closest?.(
     'input, textarea, select, button, a[href], [role="button"]'
   )) return;
   event.preventDefault();
-  if (!event.repeat) startFrogJump();
+  if (event.code === 'Space') {
+    if (!event.repeat) startFrogJump();
+  } else {
+    frogKeys.add(event.code);
+  }
+});
+
+window.addEventListener('keyup', (event) => frogKeys.delete(event.code));
+window.addEventListener('blur', () => frogKeys.clear());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) frogKeys.clear();
 });
 
 const waterRaycaster = new THREE.Raycaster();
@@ -481,7 +560,9 @@ animationTimer.connect(document);
 renderer.setAnimationLoop(() => {
   animationTimer.update();
   const delta = animationTimer.getDelta();
+  updateFireflies(animationTimer.getElapsed());
   frogMixer?.update(delta);
+  updateFrogMovement(delta);
   if (frogIsJumping) frogJumpMixer.update(delta);
   rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
   renderer.render(scene, camera);
