@@ -1,27 +1,26 @@
 import './style.css'
 import { mountControlsHelp } from './controls-help.js'
-import { addFireflies } from './fireflies.js'
+import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import frogModelUrl from './assets/models/frog-eyes.glb?url'
 import frogJumpModelUrl from './assets/models/frog-jump-fixed.glb?url'
 import frogWalkModelUrl from './assets/models/frog-walk.glb?url'
-import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep } from 'three/tsl'
 
 mountControlsHelp(document.querySelector('#app'));
 
+const nightColor = 0x0b1733;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b1733);
+scene.background = new THREE.Color(nightColor);
+// The Blender fog box is preview-only, so the fog lives here.
+scene.fog = new THREE.FogExp2(nightColor, 0.04);
 
 const camera = new THREE.PerspectiveCamera(
-  45,
+  55,
   window.innerWidth / window.innerHeight,
-  0.1,
-  100
+  0.05,
+  400
 );
-camera.position.set(9, 10, 12);
-camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGPURenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -33,169 +32,17 @@ await renderer.init();
 camera.coordinateSystem = renderer.coordinateSystem;
 camera.updateProjectionMatrix();
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x526342, 2));
-const sunlight = new THREE.DirectionalLight(0xffffff, 3);
-sunlight.position.set(5, 10, 7);
-scene.add(sunlight);
+scene.add(new THREE.HemisphereLight(0x9fb4e0, 0x2a3324, 1.4));
 
-let autoCenterPond = true;
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
-  if (!autoCenterPond && camera.view?.enabled) {
-    const view = camera.view;
-    camera.setViewOffset(
-      window.innerWidth, window.innerHeight,
-      view.offsetX * window.innerWidth / view.fullWidth,
-      view.offsetY * window.innerHeight / view.fullHeight,
-      window.innerWidth, window.innerHeight
-    );
-  }
   camera.updateProjectionMatrix();
-  if (autoCenterPond) fitPondToScreen();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// LOW-POLY DUCK POND
+const swamp = await loadSwamp(scene);
 
-// Create an irregular flat shape
-function createPondShape(radius, points, variation = 0) {
-  const shape = new THREE.Shape();
-
-  for (let i = 0; i < points; i++) {
-    const angle = (i / points) * Math.PI * 2;
-    const r = radius * (
-      1 + Math.sin(angle * 3) * variation
-      + Math.cos(angle * 5) * variation * 0.5
-    );
-
-    const x = Math.cos(angle) * r;
-    const y = Math.sin(angle) * r;
-
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  }
-
-  shape.closePath();
-  return shape;
-}
-
-// 1. GRASS ISLAND
-const grassGeometry = new THREE.ExtrudeGeometry(
-  createPondShape(5, 12, 0.04),
-  {
-    depth: 0.45,
-    bevelEnabled: false,
-    curveSegments: 1
-  }
-);
-
-grassGeometry.rotateX(-Math.PI / 2);
-
-const grass = new THREE.Mesh(
-  grassGeometry,
-  new THREE.MeshStandardMaterial({
-    color: 0x527b46,
-    flatShading: true
-  })
-);
-
-grass.position.y = -0.45;
-scene.add(grass);
-
-// 2. DARKER WATER EDGE
-const edgeGeometry = new THREE.ShapeGeometry(
-  createPondShape(3.65, 11, 0.07)
-);
-edgeGeometry.rotateX(-Math.PI / 2);
-
-const waterEdge = new THREE.Mesh(
-  edgeGeometry,
-  new THREE.MeshStandardMaterial({
-    color: 0x295b6c,
-    flatShading: true,
-    side: THREE.DoubleSide
-  })
-);
-
-waterEdge.position.y = 0.012;
-scene.add(waterEdge);
-
-// 3. BLUE WATER SURFACE
-const waterGeometry = new THREE.ShapeGeometry(
-  createPondShape(3.4, 11, 0.07)
-);
-waterGeometry.rotateX(-Math.PI / 2);
-
-// Each slot stores a click's shape UV coordinates, start time, and active flag.
-const rippleStartedAt = performance.now();
-const rippleTime = uniform(0);
-const rippleLifetime = 0.9;
-const ripples = Array.from({ length: 8 }, () => uniform(new THREE.Vector4(0, 0, 0, 0)));
-let nextRipple = 0;
-
-const waterRipples = Fn(() => {
-  const distortion = vec2(0).toVar();
-  const lighting = float(0).toVar();
-
-  for (const ripple of ripples) {
-    const age = rippleTime.sub(ripple.z).max(0);
-    const delta = uv().sub(ripple.xy);
-    const distance = length(delta);
-    const front = distance.sub(age.mul(0.8));
-    const fade = float(1).sub(age.div(rippleLifetime)).clamp(0, 1)
-      .mul(smoothstep(0, 0.08, age)).mul(ripple.w);
-    const envelope = exp(front.mul(8).pow(2).negate()).mul(fade.pow(2));
-    const phase = front.mul(38);
-
-    // Expanding wave packets distort the texture and add bright/dark rings.
-    distortion.addAssign(delta.div(distance.max(0.001))
-      .mul(sin(phase)).mul(envelope).mul(0.035));
-    lighting.addAssign(cos(phase).mul(envelope).mul(0.16));
-  }
-
-  return vec3(distortion, lighting);
-});
-
-// 2D Top Down Water
-// Shadertoy source: https://www.shadertoy.com/view/wt2GRt
-// Ported from the supplied GLSL to TSL for the WebGPU renderer.
-const topDownWater = Fn(() => {
-  const ripple = waterRipples().toVar();
-  // ShapeGeometry UVs are shape coordinates: normalize, then repeat the tile.
-  const waterRepeats = 4; // Increase for a smaller water pattern.
-  const waterUV = uv().add(ripple.xy).div(6.8).add(0.5).mul(waterRepeats);
-  const background = vec3(0.075, 0.29, 0.46);
-  // Only k.xyw is used in the original shader; store it as a vec3.
-  const k = vec3(waterUV.mul(7), time.mul(0.8)).toVar();
-  const transform = mat3(
-    vec3(-2, -1, 0),
-    vec3(3, -1, 1),
-    vec3(1, -1, -1)
-  );
-
-  // Preserve the original vector * matrix order and three successive updates.
-  k.assign(k.mul(transform));
-  const val1 = length(float(0.5).sub(fract(k.mul(0.5)))).toVar();
-  k.assign(k.mul(transform));
-  const val2 = length(float(0.5).sub(fract(k.mul(0.2)))).toVar();
-  k.assign(k.mul(transform));
-  const val3 = length(float(0.5).sub(fract(k.mul(0.5)))).toVar();
-  const highlights = pow(min(min(val1, val2), val3), 7).mul(1.8);
-  return background.add(vec3(highlights)).add(vec3(ripple.z)).max(0);
-});
-
-const waterMaterial = new THREE.MeshBasicNodeMaterial({
-  side: THREE.DoubleSide,
-  toneMapped: false
-});
-waterMaterial.colorNode = topDownWater();
-
-const water = new THREE.Mesh(waterGeometry, waterMaterial);
-
-water.position.y = 0.025;
-scene.add(water);
-
-const updateFireflies = addFireflies(scene);
+// FROG -----------------------------------------------------------------------
 
 // Keep placement separate from the model's animated transforms.
 let frogMixer = null;
@@ -212,20 +59,39 @@ const frogMovementKeys = new Set([
   'KeyW', 'ArrowUp', 'KeyS', 'ArrowDown',
   'KeyA', 'ArrowLeft', 'KeyD', 'ArrowRight'
 ]);
-const frogWalkSpeed = 0.85;
+const frogScale = 0.35;
+const frogRadius = 0.25;
+const frogWalkSpeed = 0.9;
+// The walk cycle was timed for 0.85 m/s at scale 0.5; match the feet to the speed.
+const frogWalkTimeScale = frogWalkSpeed / (0.85 * frogScale / 0.5);
 const frogTurnSpeed = Math.PI * 0.75;
+// The jump clip lifts the frog in place; move it forward while it is airborne.
+const frogJumpDistance = 1.6;
+const frogJumpAirborne = [1.05, 2.0];
+const frogMaxStep = 0.28;
+const frogMaxClimb = 0.55;
+const frogMaxJumpStep = 0.9;
+const worldLimit = 33;
 const frogJumpActions = [];
 const unfinishedJumpActions = new Set();
 const frogPlacement = new THREE.Group();
-frogPlacement.position.set(-4.15, 0.004, 0.65);
-frogPlacement.rotation.y = Math.atan2(4.15, -0.65);
 scene.add(frogPlacement);
+
+// Drop the frog at a random spot in the swamp.
+const spawn = swamp.randomSpawn();
+let frogGroundHeight = spawn.y;
+let frogSurfaceRole = 'ground';
+frogPlacement.position.copy(spawn);
+frogPlacement.rotation.y = Math.random() * Math.PI * 2;
+let frogPond = swamp.pondAt(spawn.x, spawn.z, spawn.y);
+let frogSpeed = 0;
+let lastRippleAt = 0;
 
 function prepareFrog(gltf) {
   const frog = gltf.scene;
-  frog.scale.setScalar(0.5);
+  frog.scale.setScalar(frogScale);
 
-  // Rest the feet on the grass, accounting for the asset's origin.
+  // Rest the feet on the ground, accounting for the asset's origin.
   const bounds = new THREE.Box3().setFromObject(frog);
   frog.position.y -= bounds.min.y;
   frogPlacement.add(frog);
@@ -278,6 +144,62 @@ frogLoader.loadAsync(frogWalkModelUrl).then((gltf) => {
   console.error('Could not load the walk model:', error);
 });
 
+// Move the frog over the swamp surfaces, blocked by trunks, steep rocks and the world edge.
+function moveFrog(distance, airborne) {
+  if (Math.abs(distance) < 1e-6) return 0;
+  const position = frogPlacement.position;
+  const forwardX = Math.sin(frogPlacement.rotation.y) * Math.sign(distance);
+  const forwardZ = Math.cos(frogPlacement.rotation.y) * Math.sign(distance);
+  const step = Math.abs(distance);
+  let x = THREE.MathUtils.clamp(position.x + forwardX * step, -worldLimit, worldLimit);
+  let z = THREE.MathUtils.clamp(position.z + forwardZ * step, -worldLimit, worldLimit);
+
+  // Slide around tree trunks (cylinder colliders).
+  for (const tree of swamp.trees) {
+    const dx = x - tree.x;
+    const dz = z - tree.z;
+    const gap = Math.hypot(dx, dz);
+    const minimum = tree.radius + frogRadius;
+    if (gap < minimum && gap > 1e-4) {
+      x = tree.x + dx / gap * minimum;
+      z = tree.z + dz / gap * minimum;
+    }
+  }
+
+  const surface = swamp.probeSurface(x, z);
+  if (!surface) return 0;
+  if (airborne) {
+    if (surface.height - frogGroundHeight > frogMaxJumpStep) return 0;
+  } else {
+    // Look a little ahead so steep rock sides block instead of being climbed slowly.
+    const ahead = swamp.probeSurface(x + forwardX * frogRadius, z + forwardZ * frogRadius);
+    const maxStep = surface.role === 'log' || ahead?.role === 'log' ? frogMaxClimb : frogMaxStep;
+    if (!ahead || ahead.height - frogGroundHeight > maxStep) return 0;
+    if (surface.height - frogGroundHeight > maxStep) return 0;
+  }
+
+  const moved = Math.hypot(x - position.x, z - position.z);
+  position.x = x;
+  position.z = z;
+  frogGroundHeight = surface.height;
+  frogSurfaceRole = surface.role;
+  return moved;
+}
+
+function updateFrogWater(elapsed, moving) {
+  const position = frogPlacement.position;
+  // Standing on a lily pad keeps the frog dry.
+  const pond = frogSurfaceRole === 'lily_pad' ? null : swamp.pondAt(position.x, position.z, frogGroundHeight);
+  if (pond && !frogPond && pond.props.splash_on_enter !== false) {
+    swamp.addRipple(position.x, position.z, 1.6);
+    lastRippleAt = elapsed;
+  } else if (pond && moving && pond.props.ripple_on_move !== false && elapsed - lastRippleAt > 0.35) {
+    swamp.addRipple(position.x, position.z, 0.8);
+    lastRippleAt = elapsed;
+  }
+  frogPond = pond;
+}
+
 function stopFrogWalk() {
   frogWalkDirection = 0;
   for (const action of frogWalkActions) action.stop();
@@ -285,18 +207,28 @@ function stopFrogWalk() {
 }
 
 function updateFrogMovement(delta) {
-  if (!idleFrog) return;
+  if (!idleFrog) return 0;
   const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
   frogPlacement.rotation.y += turn * frogTurnSpeed * delta;
-  if (frogIsJumping) return;
+  // Ponds slow the frog down (move/jump multipliers from the water's game properties).
+  const speedMultiplier = frogPond?.props.move_speed_multiplier ?? 1;
+  const jumpMultiplier = frogPond?.props.jump_strength_multiplier ?? 1;
+
+  if (frogIsJumping) {
+    const jumpTime = frogJumpActions[0].time;
+    const [takeoff, landing] = frogJumpAirborne;
+    if (jumpTime < takeoff || jumpTime > landing) return 0;
+    const jumpSpeed = frogJumpDistance * jumpMultiplier / (landing - takeoff);
+    return moveFrog(jumpSpeed * delta, true);
+  }
 
   const direction = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
   if (!direction || !walkFrog || frogWalkActions.length === 0) {
     if (frogWalkDirection) stopFrogWalk();
     idleFrog.visible = true;
-    return;
+    return 0;
   }
 
   if (direction !== frogWalkDirection) {
@@ -306,16 +238,17 @@ function updateFrogMovement(delta) {
         // Backward playback starts at the last frame of the walk cycle.
         if (direction < 0) action.time = action.getClip().duration;
       }
-      action.setEffectiveTimeScale(direction).setEffectiveWeight(1).play();
+      action.setEffectiveWeight(1).play();
     }
     frogWalkDirection = direction;
+  }
+  for (const action of frogWalkActions) {
+    action.setEffectiveTimeScale(direction * frogWalkTimeScale * speedMultiplier);
   }
   idleFrog.visible = false;
   walkFrog.visible = true;
   frogWalkMixer.update(delta);
-  const distance = direction * frogWalkSpeed * delta;
-  frogPlacement.position.x += Math.sin(frogPlacement.rotation.y) * distance;
-  frogPlacement.position.z += Math.cos(frogPlacement.rotation.y) * distance;
+  return moveFrog(direction * frogWalkSpeed * speedMultiplier * delta, false);
 }
 
 function startFrogJump() {
@@ -360,21 +293,86 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) frogKeys.clear();
 });
 
+// FOLLOW CAMERA ---------------------------------------------------------------
+// Sits behind the frog and swings around with it, like a third-person game camera.
+const cameraMinDistance = 1.2;
+const cameraMaxDistance = 8;
+let cameraDistance = 2.6;
+let cameraYaw = frogPlacement.rotation.y;
+const cameraTarget = new THREE.Vector3();
+const cameraGoal = new THREE.Vector3();
+const lookGoal = new THREE.Vector3();
+
+function placeCamera(delta, snap = false) {
+  const position = frogPlacement.position;
+  // Ease the yaw toward the frog's heading so turns feel smooth, not rigid.
+  const yawDifference = Math.atan2(
+    Math.sin(frogPlacement.rotation.y - cameraYaw),
+    Math.cos(frogPlacement.rotation.y - cameraYaw)
+  );
+  const follow = (rate) => (snap ? 1 : 1 - Math.exp(-rate * delta));
+  cameraYaw += yawDifference * follow(4);
+
+  const height = 0.45 + cameraDistance * 0.38;
+  cameraGoal.set(
+    position.x - Math.sin(cameraYaw) * cameraDistance,
+    position.y + height,
+    position.z - Math.cos(cameraYaw) * cameraDistance
+  );
+  // Never dip below the terrain (e.g. behind the frog on a slope).
+  cameraGoal.y = Math.max(cameraGoal.y, swamp.groundHeight(cameraGoal.x, cameraGoal.z) + 0.35);
+  lookGoal.set(
+    position.x + Math.sin(cameraYaw) * 0.8,
+    position.y + 0.3,
+    position.z + Math.cos(cameraYaw) * 0.8
+  );
+
+  camera.position.lerp(cameraGoal, follow(6));
+  cameraTarget.lerp(lookGoal, follow(10));
+  camera.lookAt(cameraTarget);
+}
+
+function zoomCamera(factor) {
+  cameraDistance = THREE.MathUtils.clamp(cameraDistance * factor, cameraMinDistance, cameraMaxDistance);
+}
+
+renderer.domElement.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  // Ctrl+wheel is a trackpad pinch; plain wheel is a mouse wheel or two-finger scroll.
+  const speed = event.ctrlKey ? 0.01 : 0.0015;
+  zoomCamera(Math.exp(event.deltaY * speed));
+}, { passive: false });
+
+// Safari exposes trackpad pinches through GestureEvent rather than Ctrl+wheel.
+let pinchStart = null;
+renderer.domElement.addEventListener('gesturestart', (event) => {
+  event.preventDefault();
+  pinchStart = { distance: cameraDistance, scale: event.scale };
+}, { passive: false });
+renderer.domElement.addEventListener('gesturechange', (event) => {
+  if (!pinchStart) return;
+  event.preventDefault();
+  cameraDistance = pinchStart.distance;
+  zoomCamera(pinchStart.scale / event.scale);
+}, { passive: false });
+renderer.domElement.addEventListener('gestureend', (event) => {
+  if (pinchStart) event.preventDefault();
+  pinchStart = null;
+}, { passive: false });
+
+// RIPPLES ON CLICK ------------------------------------------------------------
 const waterRaycaster = new THREE.Raycaster();
 const pointerPosition = new THREE.Vector2();
 let waterClick = null;
-const hasInteractionModifier = (event) => event.shiftKey || event.ctrlKey || event.metaKey;
 
 renderer.domElement.addEventListener('pointerdown', (event) => {
-  waterClick = event.button === 0 && !hasInteractionModifier(event)
-    ? { id: event.pointerId, x: event.clientX, y: event.clientY }
-    : null;
+  waterClick = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY } : null;
 });
 
 renderer.domElement.addEventListener('pointerup', (event) => {
   const click = waterClick;
   waterClick = null;
-  if (!click || event.pointerId !== click.id || event.button !== 0 || hasInteractionModifier(event)) return;
+  if (!click || event.pointerId !== click.id || event.button !== 0) return;
   if (Math.hypot(event.clientX - click.x, event.clientY - click.y) > 5) return;
 
   const bounds = renderer.domElement.getBoundingClientRect();
@@ -382,188 +380,41 @@ renderer.domElement.addEventListener('pointerup', (event) => {
     ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
     -((event.clientY - bounds.top) / bounds.height) * 2 + 1
   );
-  camera.updateMatrixWorld(true);
-  water.updateMatrixWorld(true);
   waterRaycaster.setFromCamera(pointerPosition, camera);
-  const hit = waterRaycaster.intersectObject(water, false)[0];
-  if (!hit?.uv) return;
-
-  ripples[nextRipple].value.set(
-    hit.uv.x, hit.uv.y, (performance.now() - rippleStartedAt) / 1000, 1
-  );
-  nextRipple = (nextRipple + 1) % ripples.length;
+  // The terrain hides the parts of each water plane that lie outside the pond.
+  const hit = waterRaycaster.intersectObject(swamp.world, true)
+    .find((intersection) => intersection.object !== swamp.sky);
+  if (!hit || !swamp.isWater(hit.object)) return;
+  swamp.addRipple(hit.point.x, hit.point.z, 1);
 });
 
 renderer.domElement.addEventListener('pointercancel', () => {
   waterClick = null;
 });
 
-// Keep the island within 90% of the viewport at every screen size.
-function fitPondToScreen() {
-  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
-  const verticalSlope = Math.tan(verticalFov / 2) * 0.9;
-  const horizontalSlope = verticalSlope * camera.aspect;
-  const viewRotation = camera.quaternion.clone().invert();
-  const vertex = new THREE.Vector3();
-  let distance = 0;
+// LOOP ------------------------------------------------------------------------
+placeCamera(0, true);
+camera.position.copy(cameraGoal);
 
-  for (const mesh of [grass, waterEdge, water]) {
-    mesh.updateMatrixWorld(true);
-    const positions = mesh.geometry.attributes.position;
-
-    for (let i = 0; i < positions.count; i++) {
-      vertex.fromBufferAttribute(positions, i)
-        .applyMatrix4(mesh.matrixWorld)
-        .applyQuaternion(viewRotation);
-      distance = Math.max(
-        distance,
-        vertex.z + Math.abs(vertex.x) / horizontalSlope,
-        vertex.z + Math.abs(vertex.y) / verticalSlope
-      );
-    }
-  }
-
-  camera.position.normalize().multiplyScalar(distance);
-  camera.lookAt(0, 0, 0);
-  centerPondInView();
-}
-
-function centerPondInView() {
-  camera.clearViewOffset();
-  camera.updateMatrixWorld(true);
-
-  // Center the projected outline, since perspective shifts its visual center.
-  const vertex = new THREE.Vector3();
-  const bounds = new THREE.Box2();
-  for (const mesh of [grass, waterEdge, water]) {
-    const positions = mesh.geometry.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-      vertex.fromBufferAttribute(positions, i)
-        .applyMatrix4(mesh.matrixWorld)
-        .project(camera);
-      bounds.expandByPoint(new THREE.Vector2(vertex.x, vertex.y));
-    }
-  }
-
-  const center = bounds.getCenter(new THREE.Vector2());
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-  camera.setViewOffset(
-    width, height,
-    center.x * width / 2, -center.y * height / 2,
-    width, height
-  );
-}
-
-fitPondToScreen();
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enablePan = true;
-controls.enableZoom = true;
-controls.zoomSpeed = 0.8;
-controls.minDistance = 3;
-controls.maxDistance = 40;
-controls.maxPolarAngle = Math.PI / 2 - 0.1;
-// Enable left-drag only with a modifier; ordinary clicks still make ripples.
-controls.mouseButtons.LEFT = null;
-controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
-controls.mouseButtons.RIGHT = null;
-
-const trackpadOrbit = new THREE.Spherical();
-const trackpadOffset = new THREE.Vector3();
-let trackpadPinch = null;
-
-renderer.domElement.addEventListener('wheel', (event) => {
-  if (!controls.enabled) return;
-  // Safari can also send wheel events during its native pinch gesture.
-  if (trackpadPinch) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    return;
-  }
-  // Ctrl+wheel represents a trackpad pinch: let OrbitControls zoom.
-  if (event.ctrlKey || event.deltaMode !== 0) return;
-
-  // WheelEvent has no device identifier. Keep typical discrete mouse-wheel
-  // steps as zoom; treat smooth pixel scrolling as two-finger rotation.
-  const discreteWheel = event.deltaX === 0 && (
-    Math.abs(event.wheelDeltaY) === 120 ||
-    (Math.abs(event.deltaY) >= 100 && event.deltaY % 100 === 0)
-  );
-  if (discreteWheel) return;
-
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  if (!controls.enableRotate) return;
-
-  trackpadOffset.copy(camera.position).sub(controls.target);
-  trackpadOrbit.setFromVector3(trackpadOffset);
-  trackpadOrbit.theta += event.deltaX * 0.004;
-  trackpadOrbit.phi = THREE.MathUtils.clamp(
-    trackpadOrbit.phi + event.deltaY * 0.004,
-    Math.max(0.02, controls.minPolarAngle),
-    controls.maxPolarAngle
-  );
-  camera.position.copy(controls.target).add(trackpadOffset.setFromSpherical(trackpadOrbit));
-  controls.update();
-}, { capture: true, passive: false });
-
-// Safari exposes trackpad pinches through GestureEvent rather than Ctrl+wheel.
-renderer.domElement.addEventListener('gesturestart', (event) => {
-  if (!controls.enabled || !controls.enableZoom) return;
-  event.preventDefault();
-  trackpadPinch = { distance: controls.getDistance(), scale: event.scale };
-}, { passive: false });
-
-renderer.domElement.addEventListener('gesturechange', (event) => {
-  if (!trackpadPinch) return;
-  event.preventDefault();
-  const distance = THREE.MathUtils.clamp(
-    trackpadPinch.distance / Math.pow(event.scale / trackpadPinch.scale, controls.zoomSpeed),
-    controls.minDistance, controls.maxDistance
-  );
-  trackpadOffset.copy(camera.position).sub(controls.target).setLength(distance);
-  camera.position.copy(controls.target).add(trackpadOffset);
-  controls.update();
-}, { passive: false });
-
-renderer.domElement.addEventListener('gestureend', (event) => {
-  if (trackpadPinch) event.preventDefault();
-  trackpadPinch = null;
-}, { passive: false });
-
-renderer.domElement.addEventListener('pointerdown', (event) => {
-  if (event.button === 0) {
-    // OrbitControls switches ROTATE to panning when Shift is held.
-    controls.mouseButtons.LEFT = event.shiftKey
-      ? THREE.MOUSE.ROTATE
-      : (event.ctrlKey || event.metaKey ? THREE.MOUSE.PAN : null);
-  }
-  if (event.button === 1) {
-    event.preventDefault();
-  }
-}, { capture: true });
-
-renderer.domElement.addEventListener('auxclick', (event) => {
-  if (event.button === 1) event.preventDefault();
-});
-
-controls.addEventListener('change', () => {
-  // Once panned, preserve the user's framing during rotation and zoom.
-  if (controls.target.lengthSq() > 0.000001) autoCenterPond = false;
-  if (autoCenterPond) centerPondInView();
-});
-
-// Continuous rendering updates the shader's time uniform even while idle.
 const animationTimer = new THREE.Timer();
 animationTimer.connect(document);
 renderer.setAnimationLoop(() => {
   animationTimer.update();
-  const delta = animationTimer.getDelta();
-  updateFireflies(animationTimer.getElapsed());
+  const delta = Math.min(animationTimer.getDelta(), 0.1);
+  const elapsed = animationTimer.getElapsed();
+
   frogMixer?.update(delta);
-  updateFrogMovement(delta);
+  const moved = updateFrogMovement(delta);
   if (frogIsJumping) frogJumpMixer.update(delta);
-  rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
+  frogSpeed = delta > 0 ? moved / delta : 0;
+
+  // Settle smoothly onto the surface below (terrain, lily pad, log or rock).
+  const position = frogPlacement.position;
+  position.y += (frogGroundHeight - position.y) * (1 - Math.exp(-20 * delta));
+
+  updateFrogWater(elapsed, moved > 0);
+  swamp.updatePlants(position, frogRadius, frogSpeed, delta);
+  placeCamera(delta);
+  swamp.update(elapsed, camera);
   renderer.render(scene, camera);
 });

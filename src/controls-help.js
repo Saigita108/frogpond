@@ -2,18 +2,18 @@ export function mountControlsHelp(app) {
   const menu = document.createElement('div');
   menu.className = 'controls-help';
   menu.innerHTML = `
-    <button class="info-button" type="button" aria-label="Show pond controls"
+    <button class="info-button" type="button" aria-label="Show swamp controls"
       aria-expanded="false" aria-controls="controls-panel">i</button>
-    <section class="controls-panel" id="controls-panel" aria-label="Pond controls" hidden>
+    <section class="controls-panel" id="controls-panel" aria-label="Swamp controls" hidden>
       <div class="controls-panel-top">
         <div class="device-toggle" role="group" aria-label="Choose shortcut guide">
           <button type="button" data-device="trackpad" aria-pressed="true">Trackpad</button>
           <button type="button" data-device="mouse" aria-pressed="false">Mouse</button>
         </div>
-        <button class="close-button" type="button" aria-label="Close pond controls">×</button>
+        <button class="close-button" type="button" aria-label="Close swamp controls">×</button>
       </div>
-      <h2>Explore the pond</h2>
-      <p class="controls-intro">Move around or make a little splash.</p>
+      <h2>Explore the swamp</h2>
+      <p class="controls-intro">Hop around the swamp, the camera follows your frog.</p>
       <dl class="shortcut-list"></dl>
       <p class="controls-footer">Press <kbd>Esc</kbd> to close</p>
     </section>
@@ -24,23 +24,20 @@ export function mountControlsHelp(app) {
   const panel = menu.querySelector('.controls-panel');
   const deviceButtons = menu.querySelectorAll('[data-device]');
   const shortcuts = menu.querySelector('.shortcut-list');
+  const frogControls = [
+    ['Walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
+    ['Turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>. The camera swings around with the frog.'],
+    ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.']
+  ];
   const guides = {
     trackpad: [
-      ['Rotate', 'Slide two fingers across the trackpad.'],
+      ...frogControls,
       ['Zoom', 'Pinch two fingers together or apart.'],
-      ['Make ripples', 'Click on the water.'],
-      ['Frog jump', 'Press <kbd>Space</kbd>.'],
-      ['Frog walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
-      ['Frog turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>.'],
-      ['Pan', 'Hold <kbd>Shift</kbd> and click-drag.']
+      ['Make ripples', 'Click on the water.']
     ],
     mouse: [
-      ['Rotate', 'Hold the middle mouse button and drag.'],
-      ['Pan', 'Hold <kbd>Shift</kbd> and drag with the left mouse button.'],
+      ...frogControls,
       ['Zoom', 'Scroll the mouse wheel up or down.'],
-      ['Frog jump', 'Press <kbd>Space</kbd>.'],
-      ['Frog walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
-      ['Frog turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>.'],
       ['Make ripples', 'Left-click on the water.']
     ]
   };
