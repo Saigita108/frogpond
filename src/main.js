@@ -2,6 +2,8 @@ import './style.css'
 import { mountControlsHelp } from './controls-help.js'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import frogModelUrl from './assets/models/frog-eyes.glb?url'
 import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep } from 'three/tsl'
 
 mountControlsHelp(document.querySelector('#app'));
@@ -33,10 +35,20 @@ const sunlight = new THREE.DirectionalLight(0xffffff, 3);
 sunlight.position.set(5, 10, 7);
 scene.add(sunlight);
 
+let autoCenterPond = true;
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
+  if (!autoCenterPond && camera.view?.enabled) {
+    const view = camera.view;
+    camera.setViewOffset(
+      window.innerWidth, window.innerHeight,
+      view.offsetX * window.innerWidth / view.fullWidth,
+      view.offsetY * window.innerHeight / view.fullHeight,
+      window.innerWidth, window.innerHeight
+    );
+  }
   camera.updateProjectionMatrix();
-  fitPondToScreen();
+  if (autoCenterPond) fitPondToScreen();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
@@ -180,13 +192,37 @@ const water = new THREE.Mesh(waterGeometry, waterMaterial);
 water.position.y = 0.025;
 scene.add(water);
 
+// Keep placement separate from the model's animated transforms.
+let frogMixer = null;
+const frogPlacement = new THREE.Group();
+frogPlacement.position.set(-4.15, 0.004, 0.65);
+frogPlacement.rotation.y = Math.atan2(4.15, -0.65);
+scene.add(frogPlacement);
+
+new GLTFLoader().loadAsync(frogModelUrl).then((gltf) => {
+  const frog = gltf.scene;
+  frog.scale.setScalar(0.5);
+
+  // Rest the feet on the grass, accounting for the asset's origin.
+  const bounds = new THREE.Box3().setFromObject(frog);
+  frog.position.y -= bounds.min.y;
+  frogPlacement.add(frog);
+
+  frogMixer = new THREE.AnimationMixer(frog);
+  for (const clip of gltf.animations) {
+    frogMixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+  }
+}).catch((error) => {
+  console.error('Could not load the frog model:', error);
+});
+
 const waterRaycaster = new THREE.Raycaster();
 const pointerPosition = new THREE.Vector2();
 let waterClick = null;
-const hasRotationModifier = (event) => event.shiftKey || event.ctrlKey || event.metaKey;
+const hasInteractionModifier = (event) => event.shiftKey || event.ctrlKey || event.metaKey;
 
 renderer.domElement.addEventListener('pointerdown', (event) => {
-  waterClick = event.button === 0 && !hasRotationModifier(event)
+  waterClick = event.button === 0 && !hasInteractionModifier(event)
     ? { id: event.pointerId, x: event.clientX, y: event.clientY }
     : null;
 });
@@ -194,7 +230,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
 renderer.domElement.addEventListener('pointerup', (event) => {
   const click = waterClick;
   waterClick = null;
-  if (!click || event.pointerId !== click.id || event.button !== 0 || hasRotationModifier(event)) return;
+  if (!click || event.pointerId !== click.id || event.button !== 0 || hasInteractionModifier(event)) return;
   if (Math.hypot(event.clientX - click.x, event.clientY - click.y) > 5) return;
 
   const bounds = renderer.domElement.getBoundingClientRect();
@@ -278,15 +314,14 @@ function centerPondInView() {
 fitPondToScreen();
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enablePan = false;
+controls.enablePan = true;
 controls.enableZoom = true;
 controls.zoomSpeed = 0.8;
 controls.minDistance = 3;
 controls.maxDistance = 40;
 controls.maxPolarAngle = Math.PI / 2 - 0.1;
-// OrbitControls switches PAN to rotation when Shift is held.
-// With panning disabled, an ordinary left drag has no effect.
-controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+// Enable left-drag only with a modifier; ordinary clicks still make ripples.
+controls.mouseButtons.LEFT = null;
 controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
 controls.mouseButtons.RIGHT = null;
 
@@ -354,11 +389,14 @@ renderer.domElement.addEventListener('gestureend', (event) => {
 }, { passive: false });
 
 renderer.domElement.addEventListener('pointerdown', (event) => {
+  if (event.button === 0) {
+    // OrbitControls switches ROTATE to panning when Shift is held.
+    controls.mouseButtons.LEFT = event.shiftKey
+      ? THREE.MOUSE.ROTATE
+      : (event.ctrlKey || event.metaKey ? THREE.MOUSE.PAN : null);
+  }
   if (event.button === 1) {
     event.preventDefault();
-    controls.mouseButtons.MIDDLE = event.shiftKey || event.ctrlKey || event.metaKey
-      ? THREE.MOUSE.PAN
-      : THREE.MOUSE.ROTATE;
   }
 }, { capture: true });
 
@@ -367,11 +405,17 @@ renderer.domElement.addEventListener('auxclick', (event) => {
 });
 
 controls.addEventListener('change', () => {
-  centerPondInView();
+  // Once panned, preserve the user's framing during rotation and zoom.
+  if (controls.target.lengthSq() > 0.000001) autoCenterPond = false;
+  if (autoCenterPond) centerPondInView();
 });
 
 // Continuous rendering updates the shader's time uniform even while idle.
+const animationTimer = new THREE.Timer();
+animationTimer.connect(document);
 renderer.setAnimationLoop(() => {
+  animationTimer.update();
+  frogMixer?.update(animationTimer.getDelta());
   rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
   renderer.render(scene, camera);
 });
