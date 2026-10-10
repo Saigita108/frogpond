@@ -29,12 +29,14 @@ export function mountControlsHelp(app) {
       ['Rotate', 'Slide two fingers across the trackpad.'],
       ['Zoom', 'Pinch two fingers together or apart.'],
       ['Make ripples', 'Click on the water.'],
+      ['Frog jump', 'Press <kbd>Space</kbd>.'],
       ['Pan', 'Hold <kbd>Shift</kbd> and click-drag.']
     ],
     mouse: [
       ['Rotate', 'Hold the middle mouse button and drag.'],
       ['Pan', 'Hold <kbd>Shift</kbd> and drag with the left mouse button.'],
       ['Zoom', 'Scroll the mouse wheel up or down.'],
+      ['Frog jump', 'Press <kbd>Space</kbd>.'],
       ['Make ripples', 'Left-click on the water.']
     ]
   };

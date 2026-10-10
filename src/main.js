@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import frogModelUrl from './assets/models/frog-eyes.glb?url'
+import frogJumpModelUrl from './assets/models/frog-jump-fixed.glb?url'
 import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep } from 'three/tsl'
 
 mountControlsHelp(document.querySelector('#app'));
@@ -194,12 +195,18 @@ scene.add(water);
 
 // Keep placement separate from the model's animated transforms.
 let frogMixer = null;
+let idleFrog = null;
+let jumpFrog = null;
+let frogJumpMixer = null;
+let frogIsJumping = false;
+const frogJumpActions = [];
+const unfinishedJumpActions = new Set();
 const frogPlacement = new THREE.Group();
 frogPlacement.position.set(-4.15, 0.004, 0.65);
 frogPlacement.rotation.y = Math.atan2(4.15, -0.65);
 scene.add(frogPlacement);
 
-new GLTFLoader().loadAsync(frogModelUrl).then((gltf) => {
+function prepareFrog(gltf) {
   const frog = gltf.scene;
   frog.scale.setScalar(0.5);
 
@@ -207,13 +214,71 @@ new GLTFLoader().loadAsync(frogModelUrl).then((gltf) => {
   const bounds = new THREE.Box3().setFromObject(frog);
   frog.position.y -= bounds.min.y;
   frogPlacement.add(frog);
+  return frog;
+}
 
-  frogMixer = new THREE.AnimationMixer(frog);
+const frogLoader = new GLTFLoader();
+frogLoader.loadAsync(frogModelUrl).then((gltf) => {
+  idleFrog = prepareFrog(gltf);
+
+  frogMixer = new THREE.AnimationMixer(idleFrog);
   for (const clip of gltf.animations) {
     frogMixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
   }
 }).catch((error) => {
   console.error('Could not load the frog model:', error);
+});
+
+frogLoader.loadAsync(frogJumpModelUrl).then((gltf) => {
+  jumpFrog = prepareFrog(gltf);
+  jumpFrog.visible = false;
+  frogJumpMixer = new THREE.AnimationMixer(jumpFrog);
+  for (const clip of gltf.animations) {
+    const action = frogJumpMixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    frogJumpActions.push(action);
+  }
+  // Exports may split an animation into clips for separate bones/objects.
+  // Keep the jump visible until every clip has reached its last frame.
+  frogJumpMixer.addEventListener('finished', ({ action }) => {
+    unfinishedJumpActions.delete(action);
+    if (frogIsJumping && unfinishedJumpActions.size === 0) finishFrogJump();
+  });
+  if (frogJumpActions.length === 0) {
+    console.warn('frog-jump-fixed.glb contains no animation clips. Export the rig and jump animation with the model.');
+  }
+}).catch((error) => {
+  console.error('Could not load the jump model:', error);
+});
+
+function startFrogJump() {
+  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping) return;
+  frogIsJumping = true;
+  idleFrog.visible = false;
+  jumpFrog.visible = true;
+  unfinishedJumpActions.clear();
+  for (const action of frogJumpActions) {
+    unfinishedJumpActions.add(action);
+    action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+  }
+  frogJumpMixer.update(0);
+}
+
+function finishFrogJump() {
+  frogIsJumping = false;
+  idleFrog.visible = true;
+  jumpFrog.visible = false;
+  for (const action of frogJumpActions) action.stop();
+}
+
+window.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.defaultPrevented) return;
+  if (event.target?.isContentEditable || event.target?.closest?.(
+    'input, textarea, select, button, a[href], [role="button"]'
+  )) return;
+  event.preventDefault();
+  if (!event.repeat) startFrogJump();
 });
 
 const waterRaycaster = new THREE.Raycaster();
@@ -415,7 +480,9 @@ const animationTimer = new THREE.Timer();
 animationTimer.connect(document);
 renderer.setAnimationLoop(() => {
   animationTimer.update();
-  frogMixer?.update(animationTimer.getDelta());
+  const delta = animationTimer.getDelta();
+  frogMixer?.update(delta);
+  if (frogIsJumping) frogJumpMixer.update(delta);
   rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
   renderer.render(scene, camera);
 });
