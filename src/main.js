@@ -6,6 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import frogModelUrl from './assets/models/frog-eyes.glb?url'
 import frogJumpModelUrl from './assets/models/frog-jump-fixed.glb?url'
 import frogWalkModelUrl from './assets/models/frog-walk.glb?url'
+import frogSwimModelUrl from './assets/models/frog-swim.glb?url'
 
 mountControlsHelp(document.querySelector('#app'));
 
@@ -54,6 +55,9 @@ let walkFrog = null;
 let frogWalkMixer = null;
 let frogWalkDirection = 0;
 const frogWalkActions = [];
+let swimFrog = null;
+let frogSwimMixer = null;
+const frogSwimActions = [];
 const frogKeys = new Set();
 const frogMovementKeys = new Set([
   'KeyW', 'ArrowUp', 'KeyS', 'ArrowDown',
@@ -65,6 +69,13 @@ const frogWalkSpeed = 0.9;
 // The walk cycle was timed for 0.85 m/s at scale 0.5; match the feet to the speed.
 const frogWalkTimeScale = frogWalkSpeed / (0.85 * frogScale / 0.5);
 const frogTurnSpeed = Math.PI * 0.75;
+// Stroke rate while swimming, and a slow paddle while floating in place.
+const frogSwimTimeScale = 1;
+const frogFloatTimeScale = 0.45;
+// Float low in the water, with the body partly below the waterline.
+const frogSwimHeight = -0.22;
+// How far a swimming frog may sink below the pond floor (the shallow edges).
+const frogSwimSink = 0.1;
 // The jump clip lifts the frog in place; move it forward while it is airborne.
 const frogJumpDistance = 1.6;
 const frogJumpAirborne = [1.05, 2.0];
@@ -144,6 +155,29 @@ frogLoader.loadAsync(frogWalkModelUrl).then((gltf) => {
   console.error('Could not load the walk model:', error);
 });
 
+frogLoader.loadAsync(frogSwimModelUrl).then((gltf) => {
+  swimFrog = prepareFrog(gltf);
+  swimFrog.visible = false;
+  frogSwimMixer = new THREE.AnimationMixer(swimFrog);
+  for (const clip of gltf.animations) {
+    frogSwimActions.push(frogSwimMixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play());
+  }
+}).catch((error) => {
+  console.error('Could not load the swim model:', error);
+});
+
+const frogIsSwimming = () => Boolean(frogPond && swimFrog && frogSwimActions.length && !frogIsJumping);
+
+// Show exactly one model: jump, swim (whenever the frog is in water), walk or idle.
+function showFrogModel() {
+  if (!idleFrog) return;
+  const swimming = frogIsSwimming();
+  if (jumpFrog) jumpFrog.visible = frogIsJumping;
+  if (swimFrog) swimFrog.visible = swimming;
+  if (walkFrog) walkFrog.visible = !frogIsJumping && !swimming && frogWalkDirection !== 0;
+  idleFrog.visible = !frogIsJumping && !swimming && frogWalkDirection === 0;
+}
+
 // Move the frog over the swamp surfaces, blocked by trunks, steep rocks and the world edge.
 function moveFrog(distance, airborne) {
   if (Math.abs(distance) < 1e-6) return 0;
@@ -203,7 +237,6 @@ function updateFrogWater(elapsed, moving) {
 function stopFrogWalk() {
   frogWalkDirection = 0;
   for (const action of frogWalkActions) action.stop();
-  if (walkFrog) walkFrog.visible = false;
 }
 
 function updateFrogMovement(delta) {
@@ -225,9 +258,17 @@ function updateFrogMovement(delta) {
   }
 
   const direction = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
+  if (frogIsSwimming()) {
+    // In water the swim model replaces both idle and walk.
+    if (frogWalkDirection) stopFrogWalk();
+    for (const action of frogSwimActions) {
+      action.setEffectiveTimeScale(direction ? direction * frogSwimTimeScale : frogFloatTimeScale);
+    }
+    frogSwimMixer.update(delta);
+    return moveFrog(direction * frogWalkSpeed * speedMultiplier * delta, false);
+  }
   if (!direction || !walkFrog || frogWalkActions.length === 0) {
     if (frogWalkDirection) stopFrogWalk();
-    idleFrog.visible = true;
     return 0;
   }
 
@@ -245,8 +286,6 @@ function updateFrogMovement(delta) {
   for (const action of frogWalkActions) {
     action.setEffectiveTimeScale(direction * frogWalkTimeScale * speedMultiplier);
   }
-  idleFrog.visible = false;
-  walkFrog.visible = true;
   frogWalkMixer.update(delta);
   return moveFrog(direction * frogWalkSpeed * speedMultiplier * delta, false);
 }
@@ -255,8 +294,7 @@ function startFrogJump() {
   if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping) return;
   frogIsJumping = true;
   stopFrogWalk();
-  idleFrog.visible = false;
-  jumpFrog.visible = true;
+  showFrogModel();
   unfinishedJumpActions.clear();
   for (const action of frogJumpActions) {
     unfinishedJumpActions.add(action);
@@ -267,10 +305,9 @@ function startFrogJump() {
 
 function finishFrogJump() {
   frogIsJumping = false;
-  idleFrog.visible = true;
-  jumpFrog.visible = false;
   for (const action of frogJumpActions) action.stop();
   updateFrogMovement(0);
+  showFrogModel();
 }
 
 window.addEventListener('keydown', (event) => {
@@ -408,11 +445,14 @@ renderer.setAnimationLoop(() => {
   if (frogIsJumping) frogJumpMixer.update(delta);
   frogSpeed = delta > 0 ? moved / delta : 0;
 
-  // Settle smoothly onto the surface below (terrain, lily pad, log or rock).
-  const position = frogPlacement.position;
-  position.y += (frogGroundHeight - position.y) * (1 - Math.exp(-20 * delta));
-
   updateFrogWater(elapsed, moved > 0);
+  showFrogModel();
+
+  // Settle smoothly onto the surface below (terrain, lily pad, log or rock),
+  // or float at the waterline while swimming.
+  const position = frogPlacement.position;
+  const restHeight = frogIsSwimming() ? Math.max(frogGroundHeight - frogSwimSink, frogSwimHeight) : frogGroundHeight;
+  position.y += (restHeight - position.y) * (1 - Math.exp(-20 * delta));
   swamp.updatePlants(position, frogRadius, frogSpeed, delta);
   placeCamera(delta);
   swamp.update(elapsed, camera);

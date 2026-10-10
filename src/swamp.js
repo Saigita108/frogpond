@@ -137,7 +137,14 @@ export async function loadSwamp(scene) {
     return background.add(vec3(highlights)).add(vec3(ripple.z)).max(0);
   });
 
-  const waterMaterial = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide });
+  // Slightly see-through, so the pond floor and the frog's legs show underneath.
+  const waterOpacity = 0.25;
+  const waterMaterial = new THREE.MeshBasicNodeMaterial({
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: waterOpacity,
+    depthWrite: false
+  });
   waterMaterial.colorNode = topDownWater();
 
   // SKY --------------------------------------------------------------------
