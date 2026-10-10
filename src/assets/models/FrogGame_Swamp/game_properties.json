@@ -1,0 +1,108 @@
+{
+  "file": "swamp_world.glb",
+  "units": "meters",
+  "up_axis_in_gltf": "+Y",
+  "note": "Properties are in each node's glTF 'extras'. Values named *_z are heights along the up axis (Y in glTF).",
+  "world_size_m": 80,
+  "water_surface_height": 0.0,
+  "roles": {
+    "player_spawn": {
+      "count": 1,
+      "properties": {
+        "collider": "none"
+      }
+    },
+    "ground": {
+      "count": 1,
+      "properties": {
+        "collider": "mesh",
+        "static": true
+      }
+    },
+    "water": {
+      "count": 6,
+      "properties": {
+        "collider": "none",
+        "is_trigger": true,
+        "water_depth": 0.2,
+        "water_surface_z": 0.0,
+        "shader_slot": "water",
+        "pond_radius": 8,
+        "move_speed_multiplier": 0.6,
+        "jump_strength_multiplier": 0.75,
+        "linear_drag": 2.5,
+        "buoyancy": 0.0,
+        "object_buoyancy": 1.2,
+        "splash_on_enter": true,
+        "ripple_on_move": true,
+        "ripple_speed": 1.5,
+        "ripple_decay": 1.2
+      }
+    },
+    "tree": {
+      "count": 55,
+      "properties": {
+        "collider": "cylinder",
+        "static": true,
+        "collider_radius": 0.37,
+        "collider_height": 3.27
+      }
+    },
+    "rock": {
+      "count": 45,
+      "properties": {
+        "collider": "convex",
+        "static": true
+      }
+    },
+    "log": {
+      "count": 7,
+      "properties": {
+        "climbable": true,
+        "collider": "convex",
+        "static": true
+      }
+    },
+    "lily_pad": {
+      "count": 78,
+      "properties": {
+        "jumpable": true,
+        "collider": "convex",
+        "static": true,
+        "walkable_surface_z": 0.035
+      }
+    },
+    "bendable_plant": {
+      "count": 690,
+      "properties": {
+        "bendable": true,
+        "plant_height": 1.3,
+        "bend_max_angle_deg": 65,
+        "bend_stiffness": 18.0,
+        "bend_damping": 3.0,
+        "hit_radius": 0.25,
+        "bend_shape_keys": "BendX,BendY",
+        "bend_rest_amount": 0.0,
+        "collider": "none",
+        "is_trigger": true
+      }
+    },
+    "firefly": {
+      "count": 70,
+      "properties": {
+        "collider": "none",
+        "emissive": true
+      }
+    },
+    "backdrop": {
+      "count": 1,
+      "properties": {
+        "collider": "none",
+        "unlit": true,
+        "follow_camera_xy": true,
+        "cast_shadow": false,
+        "receive_fog": false
+      }
+    }
+  }
+}
