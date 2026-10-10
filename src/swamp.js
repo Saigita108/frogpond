@@ -115,7 +115,7 @@ export async function loadSwamp(scene) {
   const topDownWater = Fn(() => {
     const ripple = waterRipples().toVar();
     // UV 1 is world meters / 4, so the pattern is seamless across all ponds.
-    const waterRepeats = 2.4; // Increase for a smaller water pattern.
+    const waterRepeats = 0.2; // Increase for a smaller water pattern.
     const waterUV = uv(1).mul(waterRepeats).add(ripple.xy);
     const background = vec3(0.05, 0.2, 0.32);
     // Only k.xyw is used in the original shader; store it as a vec3.
