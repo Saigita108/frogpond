@@ -1,5 +1,6 @@
 import './style.css'
 import { mountControlsHelp } from './controls-help.js'
+import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -362,39 +363,74 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', saveFrog);
 
-// FOLLOW CAMERA ---------------------------------------------------------------
-// Sits behind the frog and swings around with it, like a third-person game camera.
+// CAMERA ----------------------------------------------------------------------
+// Follow: sits behind the frog and swings around with it, like a third-person game camera.
+// Look around: orbits the frog freely, steered by scrolling or dragging.
 const cameraMinDistance = 1.2;
 const cameraMaxDistance = 8;
+const cameraMinPitch = -0.1;
+const cameraMaxPitch = 1.35;
+let cameraMode = loadCameraMode();
 let cameraDistance = 2.6;
 let cameraYaw = frogPlacement.rotation.y;
+let cameraPitch = 0.4;
 const cameraTarget = new THREE.Vector3();
 const cameraGoal = new THREE.Vector3();
 const lookGoal = new THREE.Vector3();
 
+const setCameraMode = mountCameraToggle(document.querySelector('#app'), cameraMode, (mode) => {
+  // Start looking around from the current follow angle, so the switch doesn't jump.
+  if (mode === 'look' && cameraMode !== 'look') {
+    cameraPitch = Math.atan2(0.15 + cameraDistance * 0.38, cameraDistance);
+  }
+  cameraMode = mode;
+});
+
+// Escape always snaps back to the follow camera.
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && cameraMode !== 'follow') setCameraMode('follow');
+});
+
+function lookAround(yawChange, pitchChange) {
+  cameraYaw += yawChange;
+  cameraPitch = THREE.MathUtils.clamp(cameraPitch + pitchChange, cameraMinPitch, cameraMaxPitch);
+}
+
 function placeCamera(delta, snap = false) {
   const position = frogPlacement.position;
-  // Ease the yaw toward the frog's heading so turns feel smooth, not rigid.
-  const yawDifference = Math.atan2(
-    Math.sin(frogPlacement.rotation.y - cameraYaw),
-    Math.cos(frogPlacement.rotation.y - cameraYaw)
-  );
   const follow = (rate) => (snap ? 1 : 1 - Math.exp(-rate * delta));
-  cameraYaw += yawDifference * follow(4);
 
-  const height = 0.45 + cameraDistance * 0.38;
-  cameraGoal.set(
-    position.x - Math.sin(cameraYaw) * cameraDistance,
-    position.y + height,
-    position.z - Math.cos(cameraYaw) * cameraDistance
-  );
+  if (cameraMode === 'look') {
+    const pivotY = position.y + 0.3;
+    const across = Math.cos(cameraPitch) * cameraDistance;
+    cameraGoal.set(
+      position.x - Math.sin(cameraYaw) * across,
+      pivotY + Math.sin(cameraPitch) * cameraDistance,
+      position.z - Math.cos(cameraYaw) * across
+    );
+    lookGoal.set(position.x, pivotY, position.z);
+  } else {
+    // Ease the yaw toward the frog's heading so turns feel smooth, not rigid.
+    const yawDifference = Math.atan2(
+      Math.sin(frogPlacement.rotation.y - cameraYaw),
+      Math.cos(frogPlacement.rotation.y - cameraYaw)
+    );
+    cameraYaw += yawDifference * follow(4);
+
+    const height = 0.45 + cameraDistance * 0.38;
+    cameraGoal.set(
+      position.x - Math.sin(cameraYaw) * cameraDistance,
+      position.y + height,
+      position.z - Math.cos(cameraYaw) * cameraDistance
+    );
+    lookGoal.set(
+      position.x + Math.sin(cameraYaw) * 0.8,
+      position.y + 0.3,
+      position.z + Math.cos(cameraYaw) * 0.8
+    );
+  }
   // Never dip below the terrain (e.g. behind the frog on a slope).
   cameraGoal.y = Math.max(cameraGoal.y, swamp.groundHeight(cameraGoal.x, cameraGoal.z) + 0.35);
-  lookGoal.set(
-    position.x + Math.sin(cameraYaw) * 0.8,
-    position.y + 0.3,
-    position.z + Math.cos(cameraYaw) * 0.8
-  );
 
   camera.position.lerp(cameraGoal, follow(6));
   cameraTarget.lerp(lookGoal, follow(10));
@@ -408,6 +444,11 @@ function zoomCamera(factor) {
 renderer.domElement.addEventListener('wheel', (event) => {
   event.preventDefault();
   // Ctrl+wheel is a trackpad pinch; plain wheel is a mouse wheel or two-finger scroll.
+  if (cameraMode === 'look' && !event.ctrlKey) {
+    // Two-finger scrolling swings the camera around the frog.
+    lookAround(event.deltaX * 0.005, event.deltaY * 0.004);
+    return;
+  }
   const speed = event.ctrlKey ? 0.01 : 0.0015;
   zoomCamera(Math.exp(event.deltaY * speed));
 }, { passive: false });
@@ -438,6 +479,12 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   waterClick = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY } : null;
 });
 
+// In look-around mode, dragging (click-and-drag or a mouse) also swings the camera.
+renderer.domElement.addEventListener('pointermove', (event) => {
+  if (cameraMode !== 'look' || !waterClick || event.pointerId !== waterClick.id) return;
+  lookAround(-event.movementX * 0.006, event.movementY * 0.005);
+});
+
 renderer.domElement.addEventListener('pointerup', (event) => {
   const click = waterClick;
   waterClick = null;
@@ -461,6 +508,33 @@ renderer.domElement.addEventListener('pointercancel', () => {
   waterClick = null;
 });
 
+// EDGE WARNING ----------------------------------------------------------------
+// Warn the player once the frog is within a few meters of the world edge.
+const edgeWarningDistance = 5;
+const edgeWarning = document.createElement('div');
+edgeWarning.className = 'edge-warning';
+edgeWarning.setAttribute('role', 'status');
+document.querySelector('#app').appendChild(edgeWarning);
+let edgeWarningShown = false;
+let edgeWarningMeters = null;
+
+function updateEdgeWarning() {
+  const { x, z } = frogPlacement.position;
+  const distanceToEdge = worldLimit - Math.max(Math.abs(x), Math.abs(z));
+  const show = distanceToEdge <= edgeWarningDistance;
+  if (show) {
+    // Count down in whole meters: 5, 4, 3, 2, 1, 0.
+    const meters = Math.max(0, Math.ceil(distanceToEdge));
+    if (meters !== edgeWarningMeters) {
+      edgeWarningMeters = meters;
+      edgeWarning.textContent = `${meters} ${meters === 1 ? 'meter' : 'meters'} from the edge, turn back`;
+    }
+  }
+  if (show === edgeWarningShown) return;
+  edgeWarningShown = show;
+  edgeWarning.classList.toggle('is-visible', show);
+}
+
 // LOOP ------------------------------------------------------------------------
 placeCamera(0, true);
 camera.position.copy(cameraGoal);
@@ -480,6 +554,7 @@ renderer.setAnimationLoop(() => {
 
   updateFrogWater(elapsed, moved > 0);
   showFrogModel();
+  updateEdgeWarning();
 
   // Save now and then while playing, in case the tab is closed without a pagehide.
   if (elapsed - lastSavedAt > 2) {
