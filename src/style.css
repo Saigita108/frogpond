@@ -1,6 +1,22 @@
+/* Swamp-at-night palette, shared with the lily-pad firefly meter. */
+:root {
+  --night: #0b1733;
+  --moss: linear-gradient(160deg, #24452f, #12271c);
+  --moss-hover: #2c4f37;
+  --moss-deep: #0f2117;
+  --edge: #5d8a5c;
+  --edge-soft: #3f6145;
+  --text: #d6e6c8;
+  --text-soft: #a9c79f;
+  --cream: #fbefc4;
+  --glow: #ffe27a;
+  --glow-edge: #ffc94a;
+  --shadow: 0 6px 16px #050b1a99;
+}
+
 body {
   margin: 0;
-  background: #0b1733;
+  background: var(--night);
   font-family: Arial, sans-serif;
 }
 
@@ -13,12 +29,14 @@ canvas {
   display: block;
 }
 
+/* CONTROLS HELP ------------------------------------------------------------ */
+
 .controls-help {
   position: fixed;
   top: 24px;
   right: 24px;
   z-index: 10;
-  color: #234234;
+  color: var(--text);
 }
 
 .controls-help button {
@@ -32,18 +50,24 @@ canvas {
   margin-left: auto;
   width: 44px;
   height: 44px;
-  border: 1px solid #cad8c4;
+  border: 1px solid var(--edge);
   border-radius: 50%;
-  background: #fcfdf7;
-  box-shadow: 0 4px 14px #23423414;
+  background: var(--moss);
+  box-shadow: var(--shadow);
+  color: var(--cream);
   font-family: Georgia, serif;
   font-size: 24px;
   font-style: italic;
 }
 
+.controls-help .info-button[aria-expanded="true"] {
+  border-color: var(--glow-edge);
+  box-shadow: var(--shadow), 0 0 12px #ffc94a66;
+}
+
 .controls-help .info-button:hover,
 .controls-help .close-button:hover {
-  background: #e8efdf;
+  background: var(--moss-hover);
 }
 
 .controls-panel {
@@ -53,10 +77,10 @@ canvas {
   overflow-y: auto;
   margin-top: 12px;
   padding: 22px;
-  background: #fcfdf7;
-  border: 1px solid #cad8c4;
+  background: var(--moss);
+  border: 1px solid var(--edge);
   border-radius: 20px;
-  box-shadow: 0 12px 36px #23423424;
+  box-shadow: 0 12px 36px #050b1acc;
 }
 
 .controls-panel[hidden] {
@@ -73,8 +97,9 @@ canvas {
   display: flex;
   flex: 1;
   padding: 4px;
+  border: 1px solid var(--edge-soft);
   border-radius: 12px;
-  background: #e9efdf;
+  background: var(--moss-deep);
 }
 
 .device-toggle button {
@@ -87,9 +112,15 @@ canvas {
   font-weight: 600;
 }
 
-.device-toggle button[aria-pressed="true"] {
-  background: #365d42;
-  color: white;
+.device-toggle button:hover {
+  background: var(--moss-hover);
+}
+
+.device-toggle button[aria-pressed="true"],
+.camera-toggle button[aria-pressed="true"] {
+  background: var(--glow);
+  color: #1c3a29;
+  box-shadow: 0 0 12px #ffc94a80;
 }
 
 .controls-help .close-button {
@@ -103,14 +134,18 @@ canvas {
 
 .controls-panel h2 {
   margin: 22px 0 6px;
-  font-size: 20px;
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-style: italic;
+  font-weight: normal;
 }
 
 .controls-intro,
 .shortcut-list dd {
   font-size: 13px;
   line-height: 1.6;
-  color: #62735f;
+  color: var(--text-soft);
 }
 
 .controls-intro {
@@ -123,11 +158,12 @@ canvas {
 
 .shortcut-list > div {
   padding: 12px 0;
-  border-top: 1px solid #e3e9dc;
+  border-top: 1px solid #3f614580;
 }
 
 .shortcut-list dt {
   margin-bottom: 4px;
+  color: var(--text);
   font-size: 13px;
   font-weight: 600;
 }
@@ -136,22 +172,30 @@ canvas {
   margin: 0;
 }
 
+.shortcut-list b {
+  color: var(--text);
+}
+
 .controls-help kbd {
   padding: 2px 5px;
-  border: 1px solid #d5decf;
+  border: 1px solid var(--edge-soft);
+  border-bottom-width: 2px;
   border-radius: 4px;
-  background: #f0f4e9;
+  background: var(--moss-deep);
+  color: var(--cream);
   font-size: 11px;
 }
 
 .controls-footer {
   margin: 16px 0 0;
-  color: #62735f;
+  color: var(--text-soft);
   font-size: 11px;
 }
 
-.controls-help button:focus-visible {
-  outline: 2px solid #438d9b;
+.controls-help button:focus-visible,
+.camera-toggle button:focus-visible,
+.reset-button:focus-visible {
+  outline: 2px solid var(--glow);
   outline-offset: 3px;
 }
 
@@ -162,6 +206,8 @@ canvas {
   }
 }
 
+/* CAMERA TOGGLE ------------------------------------------------------------ */
+
 .camera-toggle {
   position: fixed;
   top: 24px;
@@ -169,10 +215,10 @@ canvas {
   z-index: 10;
   display: flex;
   padding: 4px;
-  border: 1px solid #cad8c4;
+  border: 1px solid var(--edge);
   border-radius: 14px;
-  background: #fcfdf7;
-  box-shadow: 0 4px 14px #23423414;
+  background: var(--moss);
+  box-shadow: var(--shadow);
 }
 
 .camera-toggle button {
@@ -180,7 +226,7 @@ canvas {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #234234;
+  color: var(--text);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -188,17 +234,7 @@ canvas {
 }
 
 .camera-toggle button:hover {
-  background: #e8efdf;
-}
-
-.camera-toggle button[aria-pressed="true"] {
-  background: #365d42;
-  color: white;
-}
-
-.camera-toggle button:focus-visible {
-  outline: 2px solid #438d9b;
-  outline-offset: 3px;
+  background: var(--moss-hover);
 }
 
 @media (max-width: 480px) {
@@ -208,6 +244,8 @@ canvas {
   }
 }
 
+/* SCREEN MESSAGE (edge warning, respawn countdown) ------------------------- */
+
 .screen-message {
   position: fixed;
   top: 50%;
@@ -215,14 +253,15 @@ canvas {
   z-index: 5;
   max-width: calc(100vw - 32px);
   box-sizing: border-box;
-  padding: 14px 22px;
-  border: 1px solid #e8b9a4;
-  border-radius: 14px;
-  background: #fcfdf7;
-  box-shadow: 0 12px 36px #23423424;
-  color: #8a3a1c;
-  font-size: 16px;
-  font-weight: 600;
+  padding: 14px 24px;
+  border: 1px solid var(--glow-edge);
+  border-radius: 16px;
+  background: #0b1733e6;
+  box-shadow: 0 12px 36px #050b1acc, 0 0 18px #ffc94a40;
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-style: italic;
   text-align: center;
   pointer-events: none;
   opacity: 0;
@@ -234,6 +273,8 @@ canvas {
   opacity: 1;
   transform: translate(-50%, -50%);
 }
+
+/* FIREFLY METER ------------------------------------------------------------ */
 
 .firefly-meter {
   position: fixed;
@@ -348,7 +389,8 @@ canvas {
   }
 }
 
-/* Sits just left of the info button in the top right corner. */
+/* RESET BUTTON (just left of the info button) ----------------------------- */
+
 .reset-button {
   position: fixed;
   top: 24px;
@@ -356,11 +398,11 @@ canvas {
   z-index: 10;
   height: 44px;
   padding: 0 18px;
-  border: 1px solid #cad8c4;
+  border: 1px solid var(--edge);
   border-radius: 22px;
-  background: #fcfdf7;
-  box-shadow: 0 4px 14px #23423414;
-  color: #234234;
+  background: var(--moss);
+  box-shadow: var(--shadow);
+  color: var(--text);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -368,12 +410,7 @@ canvas {
 }
 
 .reset-button:hover {
-  background: #e8efdf;
-}
-
-.reset-button:focus-visible {
-  outline: 2px solid #438d9b;
-  outline-offset: 3px;
+  background: var(--moss-hover);
 }
 
 @media (max-width: 480px) {
