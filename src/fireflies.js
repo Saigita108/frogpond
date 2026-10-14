@@ -10,10 +10,6 @@ const fireflyLightPeak = 1.5;
 // material whenever the number of lights changes (each time one is eaten). Instead a fixed
 // few lights follow the fireflies closest to the frog.
 const pooledLightCount = 4;
-// Fireflies leave one by one between these points of the night (0 = dusk, 1 = sunrise),
-// shrinking away over fadeDuration seconds.
-const vanishStart = 0.6;
-const fadeDuration = 1.5;
 
 // GLTFLoader skips KHR_animation_pointer channels, which pulse the lantern's glow and light.
 // Read them once; every firefly gets its own copy so they don't all share one material.
@@ -130,10 +126,8 @@ export async function loadFireflies(scene, swamp) {
       lantern,
       lanternPosition: new THREE.Vector3(),
       mixer,
-      // flying -> caught -> eaten, or flying -> vanishing -> gone at dawn.
-      state: 'flying',
-      vanishAt: vanishStart + Math.random() * (1 - vanishStart),
-      fade: 1
+      // flying -> caught (on the tongue) -> eaten. Fireflies only leave by being eaten.
+      state: 'flying'
     });
   }
 
@@ -156,19 +150,6 @@ export async function loadFireflies(scene, swamp) {
       firefly.body.getWorldPosition(bodyPosition);
       firefly.model.position.add(point).sub(bodyPosition);
     },
-    // Fireflies whose time has come fly off as dawn breaks (progress 0..1 through the night).
-    dawn(progress, delta) {
-      for (const firefly of fireflies) {
-        if (firefly.state === 'flying' && progress >= firefly.vanishAt) firefly.state = 'vanishing';
-        if (firefly.state !== 'vanishing') continue;
-        firefly.fade = Math.max(firefly.fade - delta / fadeDuration, 0);
-        firefly.model.scale.setScalar(fireflyScale * firefly.fade);
-        if (firefly.fade === 0) {
-          firefly.state = 'gone';
-          firefly.model.removeFromParent();
-        }
-      }
-    },
     swallow(firefly) {
       firefly.state = 'eaten';
       firefly.model.removeFromParent();
@@ -176,7 +157,7 @@ export async function loadFireflies(scene, swamp) {
     // Fly, and light up the fireflies nearest to a world position (the frog).
     update(delta, near) {
       for (const firefly of fireflies) {
-        if (firefly.state === 'flying' || firefly.state === 'vanishing') firefly.mixer.update(delta);
+        if (firefly.state === 'flying') firefly.mixer.update(delta);
       }
       const glowing = fireflies.filter((firefly) => firefly.model.parent);
       for (const firefly of glowing) firefly.lantern.getWorldPosition(firefly.lanternPosition);
@@ -184,7 +165,7 @@ export async function loadFireflies(scene, swamp) {
       lights.forEach((light, index) => {
         const firefly = glowing[index];
         // Unused lights stay in the scene at zero brightness, so the light count never changes.
-        light.intensity = firefly ? firefly.lantern.intensity * firefly.fade : 0;
+        light.intensity = firefly?.lantern.intensity ?? 0;
         if (firefly) light.position.copy(firefly.lanternPosition);
       });
     }

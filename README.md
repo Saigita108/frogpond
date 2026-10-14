@@ -1,6 +1,6 @@
 # Frog Pond
 
-A night-time swamp where you play a frog racing the sunrise: hop between lily pads, swim through the ponds and catch all 10 fireflies with your tongue before dawn. Built with three.js and the `WebGPURenderer`.
+A night-time swamp where you play a frog racing the sunrise: hop between lily pads, swim through the ponds and catch 10 of the 20 fireflies with your tongue before dawn. Built with three.js and the `WebGPURenderer`.
 
 **Live demo:** https://saigita108.github.io/frogpond/
 
@@ -37,13 +37,14 @@ The **i** button in the top right shows the controls in the game as well.
 
 ## Gameplay: race the night
 
-Eat all **10 fireflies** before the sun comes up, in **3 minutes**.
+**20 fireflies** fly around the swamp. Eat **10** of them before the sun comes up, in **3 minutes**.
 
 - **The clock** (top center) starts with the frog's first move and counts down to sunrise. In the last 30 seconds it glows amber.
-- **Dawn comes slowly:** after about a minute the sky, fog, light and water start warming toward sunrise. From about 1:48, fireflies start flying off one by one, and the last ones leave at sunrise.
+- **Dawn comes slowly:** after about a minute the sky, fog, light and water start warming toward sunrise.
+- **Fireflies stay until eaten:** they only disappear when the frog eats them. A new night (Play again, Reset or a new frog) brings back all 20.
 - **Catching:** press `F` when a firefly is within 1 m in front of the frog. The tongue aims at it, stretches to reach it and pulls it into the mouth. This works on land and in the water.
 - **The lily-pad meter** (bottom left) lights up one dot for each firefly eaten.
-- **Ending the night:** eat all 10 for a "Feast complete" card with your time. Your **best time** is saved. If the sun comes up first, you see how many you caught. Both cards have **Play again**.
+- **Ending the night:** eat 10 for a "Feast complete" card with your time. Your **best time** is saved. If the sun comes up first, you see how many you caught. Both cards have **Play again**.
 - **Progress is saved on your device:** the frog's position, the clock, the fireflies eaten, your best time and the camera mode all survive a refresh.
 - **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up, and after 5 seconds a new frog starts a new night.
 

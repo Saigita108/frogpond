@@ -13,7 +13,7 @@ export function mountControlsHelp(app) {
         <button class="close-button" type="button" aria-label="Close swamp controls">×</button>
       </div>
       <h2>Explore the swamp</h2>
-      <p class="controls-intro">Eat all 10 fireflies before the sun comes up. The night starts when you first move, and the camera follows your frog.</p>
+      <p class="controls-intro">Eat 10 of the 20 fireflies before the sun comes up. The night starts when you first move, and the camera follows your frog.</p>
       <dl class="shortcut-list"></dl>
       <p class="controls-footer">Press <kbd>Esc</kbd> to close</p>
     </section>

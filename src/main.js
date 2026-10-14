@@ -4,6 +4,7 @@ import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
 import { loadExplosion } from './explosion.js'
 import { loadFireflies } from './fireflies.js'
 import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
+import { mountRadar } from './radar.js'
 import { loadBestTime, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveNightTime } from './night.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
@@ -480,7 +481,7 @@ function endNight(won, restoring = false) {
   endCard.show({
     won,
     eaten: firefliesEaten,
-    total: fireflyCount,
+    total: fireflyGoal,
     time: nightTime,
     bestTime,
     newBest
@@ -508,7 +509,6 @@ function updateNight(delta) {
   hemisphereLight.color.lerpColors(nightAmbient, dawnAmbient, dawn);
   hemisphereLight.intensity = THREE.MathUtils.lerp(1.4, 2.4, dawn);
   swamp.setDawn(dawn);
-  fireflies?.dawn(progress, delta);
   const state = nightResult ?? (nightStarted ? 'running' : 'waiting');
   setNightClock(nightTime, state);
 }
@@ -519,7 +519,9 @@ window.addEventListener('pagehide', () => {
 
 // FIREFLIES AND TONGUE -------------------------------------------------------
 // Fireflies flutter all over the swamp; F flicks the tongue to eat one.
-const fireflyCount = 10;
+const fireflyCount = 20;
+// Eating this many wins the night; the extra fireflies give some room to miss.
+const fireflyGoal = 10;
 // Keep them clear of the edge warning zone, so none is lost to the explosion.
 const fireflyMargin = 26;
 // A firefly can be eaten when it is this close to the mouth and roughly in front of the frog.
@@ -527,10 +529,10 @@ const tongueRange = 1;
 const tongueAimAngle = THREE.MathUtils.degToRad(35);
 let fireflies = null;
 // Eaten fireflies stay eaten across reloads; a new frog after an explosion starts over at 0.
-let firefliesEaten = loadFirefliesEaten(fireflyCount);
-const setFireflyMeter = mountFireflyMeter(document.querySelector('#app'), fireflyCount, firefliesEaten);
+let firefliesEaten = loadFirefliesEaten(fireflyGoal);
+const setFireflyMeter = mountFireflyMeter(document.querySelector('#app'), fireflyGoal, firefliesEaten);
 // A night that ended before a reload shows its result again.
-if (firefliesEaten >= fireflyCount) endNight(true, true);
+if (firefliesEaten >= fireflyGoal) endNight(true, true);
 else if (nightTime >= nightLength) endNight(false, true);
 // The firefly the tongue is flying at, and the one stuck to it on the way back.
 let tongueTarget = null;
@@ -542,6 +544,25 @@ const tongueAimPoint = new THREE.Vector3();
 const tongueForward = new THREE.Vector3(0, 0, 1);
 const tongueAimRotation = new THREE.Quaternion();
 const tongueAimScale = new THREE.Vector3();
+
+// RADAR: shows where the fireflies around the frog are.
+const radarRange = 20;
+const updateRadar = mountRadar(document.querySelector('#app'), radarRange);
+const radarFrog = { x: 0, z: 0, heading: 0 };
+const radarFireflies = [];
+
+function refreshRadar() {
+  radarFrog.x = frogPlacement.position.x;
+  radarFrog.z = frogPlacement.position.z;
+  radarFrog.heading = frogPlacement.rotation.y;
+  radarFireflies.length = 0;
+  for (const firefly of fireflies?.fireflies ?? []) {
+    if (firefly.state !== 'flying') continue;
+    fireflies.bodyPosition(firefly, fireflyPosition);
+    radarFireflies.push({ x: fireflyPosition.x, z: fireflyPosition.z, alpha: 1 });
+  }
+  updateRadar(radarFrog, radarFireflies);
+}
 
 loadFireflies(scene, swamp).then((loaded) => {
   fireflies = loaded;
@@ -649,7 +670,7 @@ function swallowFirefly() {
   firefliesEaten += 1;
   saveFirefliesEaten(firefliesEaten);
   setFireflyMeter(firefliesEaten);
-  if (firefliesEaten >= fireflyCount && !nightResult) endNight(true);
+  if (firefliesEaten >= fireflyGoal && !nightResult) endNight(true);
 }
 
 function finishFrogTongue() {
@@ -996,6 +1017,7 @@ renderer.setAnimationLoop(() => {
   updateFrogTongue(delta);
   fireflies?.update(delta, frogPlacement.position);
   updateNight(delta);
+  refreshRadar();
   frogSpeed = delta > 0 ? moved / delta : 0;
 
   updateFrogWater(elapsed, moved > 0);

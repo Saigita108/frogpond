@@ -591,3 +591,54 @@ canvas {
     animation: none;
   }
 }
+
+/* RADAR (left side) -------------------------------------------------------- */
+
+.radar {
+  position: fixed;
+  top: 50%;
+  left: 24px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.radar canvas {
+  display: block;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+}
+
+.radar-label {
+  padding: 4px 12px;
+  border: 1px solid var(--edge-soft);
+  border-radius: 10px;
+  background: #0b1733cc;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Short or narrow screens: a smaller radar, so it clears the controls and the meter. */
+@media (max-width: 480px), (max-height: 620px) {
+  .radar {
+    left: 16px;
+  }
+
+  .radar canvas {
+    width: 96px;
+    height: 96px;
+  }
+
+  .radar-label {
+    display: none;
+  }
+}

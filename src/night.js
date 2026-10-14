@@ -101,11 +101,11 @@ export function mountEndCard(app, onPlayAgain) {
     show({ won, eaten, total, time, bestTime, newBest }) {
       title.textContent = won ? 'Feast complete!' : 'The sun is up';
       result.textContent = won
-        ? `You ate all ${total} fireflies in ${formatTime(time)}.`
+        ? `You ate ${total} fireflies in ${formatTime(time)}.`
         : `You ate ${eaten} of ${total} fireflies before sunrise.`;
       if (newBest) best.textContent = 'New best time!';
       else if (bestTime !== null) best.textContent = `Best time: ${formatTime(bestTime)}`;
-      else best.textContent = `Eat all ${total} before sunrise to set a best time.`;
+      else best.textContent = `Eat ${total} before sunrise to set a best time.`;
       best.classList.toggle('is-new', newBest);
       card.hidden = false;
       // Focus the button so Enter or Space plays again (the frog ignores keys while it has focus).
