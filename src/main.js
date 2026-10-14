@@ -150,6 +150,25 @@ let frogPond = frogSurfaceRole === 'lily_pad' ? null : swamp.pondAt(spawn.x, spa
 let frogSpeed = 0;
 let lastRippleAt = 0;
 
+// Build a hidden model's shaders now, so it doesn't stall the game the first time it shows up.
+// compileAsync picks its objects before it awaits, so the model never shows on screen.
+function precompile(model) {
+  const culled = [];
+  model.traverse((object) => {
+    if (object.frustumCulled) {
+      object.frustumCulled = false;
+      culled.push(object);
+    }
+  });
+  const wasVisible = model.visible;
+  model.visible = true;
+  renderer.compileAsync(model, camera, scene).catch((error) => {
+    console.warn('Could not precompile a model:', error);
+  });
+  model.visible = wasVisible;
+  for (const object of culled) object.frustumCulled = true;
+}
+
 function prepareFrog(gltf) {
   const frog = gltf.scene;
   frog.scale.setScalar(frogScale);
@@ -176,6 +195,7 @@ frogLoader.loadAsync(frogModelUrl).then((gltf) => {
 frogLoader.loadAsync(frogJumpModelUrl).then((gltf) => {
   jumpFrog = prepareFrog(gltf);
   jumpFrog.visible = false;
+  precompile(jumpFrog);
   frogJumpMixer = new THREE.AnimationMixer(jumpFrog);
   for (const clip of gltf.animations) {
     const action = frogJumpMixer.clipAction(clip);
@@ -199,6 +219,7 @@ frogLoader.loadAsync(frogJumpModelUrl).then((gltf) => {
 frogLoader.loadAsync(frogWalkModelUrl).then((gltf) => {
   walkFrog = prepareFrog(gltf);
   walkFrog.visible = false;
+  precompile(walkFrog);
   frogWalkMixer = new THREE.AnimationMixer(walkFrog);
   for (const clip of gltf.animations) {
     frogWalkActions.push(frogWalkMixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity));
@@ -210,6 +231,7 @@ frogLoader.loadAsync(frogWalkModelUrl).then((gltf) => {
 frogLoader.loadAsync(frogSwimModelUrl).then((gltf) => {
   swimFrog = prepareFrog(gltf);
   swimFrog.visible = false;
+  precompile(swimFrog);
   frogSwimMixer = new THREE.AnimationMixer(swimFrog);
   for (const clip of gltf.animations) {
     frogSwimActions.push(frogSwimMixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play());
@@ -230,6 +252,7 @@ const tongueSwallowTime = 0.75;
 frogLoader.loadAsync(frogTongueModelUrl).then((gltf) => {
   tongueFrog = prepareFrog(gltf);
   tongueFrog.visible = false;
+  precompile(tongueFrog);
   tongueAim = tongueFrog.getObjectByName('tongue_aim');
   tongueTip = tongueFrog.getObjectByName('tongue_9');
   // The stretched tongue leaves the skinned mesh's bounds; don't let it get culled.
@@ -759,6 +782,7 @@ let respawnCountdown = null;
 
 loadExplosion(scene, explosionScale).then((loaded) => {
   explosion = loaded;
+  precompile(explosion.model);
 }).catch((error) => {
   console.error('Could not load the explosion model:', error);
 });
@@ -866,7 +890,7 @@ renderer.setAnimationLoop(() => {
   const moved = updateFrogMovement(delta);
   if (frogIsJumping) frogJumpMixer.update(delta);
   updateFrogTongue(delta);
-  fireflies?.update(delta);
+  fireflies?.update(delta, frogPlacement.position);
   frogSpeed = delta > 0 ? moved / delta : 0;
 
   updateFrogWater(elapsed, moved > 0);

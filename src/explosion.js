@@ -67,6 +67,7 @@ export async function loadExplosion(scene, scale) {
   });
 
   return {
+    model: explosion,
     // Play the explosion once at a world position, then call done().
     play(position, done) {
       explosion.position.copy(position);
