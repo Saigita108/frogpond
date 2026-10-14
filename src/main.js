@@ -1,5 +1,7 @@
 import './style.css'
 import { mountControlsHelp } from './controls-help.js'
+import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
+import { loadExplosion } from './explosion.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -47,6 +49,8 @@ const swamp = await loadSwamp(scene);
 
 // Keep placement separate from the model's animated transforms.
 let frogMixer = null;
+// True from the moment the frog explodes at the world edge until it respawns.
+let frogExploded = false;
 let idleFrog = null;
 let jumpFrog = null;
 let frogJumpMixer = null;
@@ -88,13 +92,51 @@ const unfinishedJumpActions = new Set();
 const frogPlacement = new THREE.Group();
 scene.add(frogPlacement);
 
-// Drop the frog at a random spot in the swamp.
-const spawn = swamp.randomSpawn();
+// Remember where the frog was on this device, so a reload puts it back there.
+const frogSaveKey = 'frog-pond:frog';
+
+function loadFrogSave() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(frogSaveKey));
+    if (!saved || ![saved.x, saved.z, saved.rotation].every(Number.isFinite)) return null;
+    // The swamp may have changed since the save; only reuse spots that are still walkable.
+    const surface = swamp.probeSurface(saved.x, saved.z);
+    if (!surface) return null;
+    return { ...saved, surface };
+  } catch {
+    return null;
+  }
+}
+
+function saveFrog() {
+  // An exploded frog has no position worth keeping; it respawns somewhere random.
+  if (frogExploded) return;
+  try {
+    const { x, z } = frogPlacement.position;
+    localStorage.setItem(frogSaveKey, JSON.stringify({ x, z, rotation: frogPlacement.rotation.y }));
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data); the frog just won't be remembered.
+  }
+}
+
+function clearFrogSave() {
+  try {
+    localStorage.removeItem(frogSaveKey);
+  } catch {
+    // Nothing was saved if storage is unavailable.
+  }
+}
+
+// Drop the frog where it was last time, or at a random spot in the swamp.
+const savedFrog = loadFrogSave();
+const spawn = savedFrog
+  ? new THREE.Vector3(savedFrog.x, savedFrog.surface.height, savedFrog.z)
+  : swamp.randomSpawn();
 let frogGroundHeight = spawn.y;
-let frogSurfaceRole = 'ground';
+let frogSurfaceRole = savedFrog?.surface.role ?? 'ground';
 frogPlacement.position.copy(spawn);
-frogPlacement.rotation.y = Math.random() * Math.PI * 2;
-let frogPond = swamp.pondAt(spawn.x, spawn.z, spawn.y);
+frogPlacement.rotation.y = savedFrog?.rotation ?? Math.random() * Math.PI * 2;
+let frogPond = frogSurfaceRole === 'lily_pad' ? null : swamp.pondAt(spawn.x, spawn.z, spawn.y);
 let frogSpeed = 0;
 let lastRippleAt = 0;
 
@@ -240,7 +282,7 @@ function stopFrogWalk() {
 }
 
 function updateFrogMovement(delta) {
-  if (!idleFrog) return 0;
+  if (!idleFrog || frogExploded) return 0;
   const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
@@ -291,7 +333,7 @@ function updateFrogMovement(delta) {
 }
 
 function startFrogJump() {
-  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping) return;
+  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogExploded) return;
   frogIsJumping = true;
   stopFrogWalk();
   showFrogModel();
@@ -327,42 +369,81 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => frogKeys.delete(event.code));
 window.addEventListener('blur', () => frogKeys.clear());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) frogKeys.clear();
+  if (document.hidden) {
+    frogKeys.clear();
+    saveFrog();
+  }
 });
+window.addEventListener('pagehide', saveFrog);
 
-// FOLLOW CAMERA ---------------------------------------------------------------
-// Sits behind the frog and swings around with it, like a third-person game camera.
+// CAMERA ----------------------------------------------------------------------
+// Follow: sits behind the frog and swings around with it, like a third-person game camera.
+// Look around: orbits the frog freely, steered by scrolling or dragging.
 const cameraMinDistance = 1.2;
 const cameraMaxDistance = 8;
+const cameraMinPitch = -0.1;
+const cameraMaxPitch = 1.35;
+let cameraMode = loadCameraMode();
 let cameraDistance = 2.6;
 let cameraYaw = frogPlacement.rotation.y;
+let cameraPitch = 0.4;
 const cameraTarget = new THREE.Vector3();
 const cameraGoal = new THREE.Vector3();
 const lookGoal = new THREE.Vector3();
 
+const setCameraMode = mountCameraToggle(document.querySelector('#app'), cameraMode, (mode) => {
+  // Start looking around from the current follow angle, so the switch doesn't jump.
+  if (mode === 'look' && cameraMode !== 'look') {
+    cameraPitch = Math.atan2(0.15 + cameraDistance * 0.38, cameraDistance);
+  }
+  cameraMode = mode;
+});
+
+// Escape always snaps back to the follow camera.
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && cameraMode !== 'follow') setCameraMode('follow');
+});
+
+function lookAround(yawChange, pitchChange) {
+  cameraYaw += yawChange;
+  cameraPitch = THREE.MathUtils.clamp(cameraPitch + pitchChange, cameraMinPitch, cameraMaxPitch);
+}
+
 function placeCamera(delta, snap = false) {
   const position = frogPlacement.position;
-  // Ease the yaw toward the frog's heading so turns feel smooth, not rigid.
-  const yawDifference = Math.atan2(
-    Math.sin(frogPlacement.rotation.y - cameraYaw),
-    Math.cos(frogPlacement.rotation.y - cameraYaw)
-  );
   const follow = (rate) => (snap ? 1 : 1 - Math.exp(-rate * delta));
-  cameraYaw += yawDifference * follow(4);
 
-  const height = 0.45 + cameraDistance * 0.38;
-  cameraGoal.set(
-    position.x - Math.sin(cameraYaw) * cameraDistance,
-    position.y + height,
-    position.z - Math.cos(cameraYaw) * cameraDistance
-  );
+  if (cameraMode === 'look') {
+    const pivotY = position.y + 0.3;
+    const across = Math.cos(cameraPitch) * cameraDistance;
+    cameraGoal.set(
+      position.x - Math.sin(cameraYaw) * across,
+      pivotY + Math.sin(cameraPitch) * cameraDistance,
+      position.z - Math.cos(cameraYaw) * across
+    );
+    lookGoal.set(position.x, pivotY, position.z);
+  } else {
+    // Ease the yaw toward the frog's heading so turns feel smooth, not rigid.
+    const yawDifference = Math.atan2(
+      Math.sin(frogPlacement.rotation.y - cameraYaw),
+      Math.cos(frogPlacement.rotation.y - cameraYaw)
+    );
+    cameraYaw += yawDifference * follow(4);
+
+    const height = 0.45 + cameraDistance * 0.38;
+    cameraGoal.set(
+      position.x - Math.sin(cameraYaw) * cameraDistance,
+      position.y + height,
+      position.z - Math.cos(cameraYaw) * cameraDistance
+    );
+    lookGoal.set(
+      position.x + Math.sin(cameraYaw) * 0.8,
+      position.y + 0.3,
+      position.z + Math.cos(cameraYaw) * 0.8
+    );
+  }
   // Never dip below the terrain (e.g. behind the frog on a slope).
   cameraGoal.y = Math.max(cameraGoal.y, swamp.groundHeight(cameraGoal.x, cameraGoal.z) + 0.35);
-  lookGoal.set(
-    position.x + Math.sin(cameraYaw) * 0.8,
-    position.y + 0.3,
-    position.z + Math.cos(cameraYaw) * 0.8
-  );
 
   camera.position.lerp(cameraGoal, follow(6));
   cameraTarget.lerp(lookGoal, follow(10));
@@ -376,6 +457,11 @@ function zoomCamera(factor) {
 renderer.domElement.addEventListener('wheel', (event) => {
   event.preventDefault();
   // Ctrl+wheel is a trackpad pinch; plain wheel is a mouse wheel or two-finger scroll.
+  if (cameraMode === 'look' && !event.ctrlKey) {
+    // Two-finger scrolling swings the camera around the frog.
+    lookAround(event.deltaX * 0.005, event.deltaY * 0.004);
+    return;
+  }
   const speed = event.ctrlKey ? 0.01 : 0.0015;
   zoomCamera(Math.exp(event.deltaY * speed));
 }, { passive: false });
@@ -406,6 +492,12 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   waterClick = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY } : null;
 });
 
+// In look-around mode, dragging (click-and-drag or a mouse) also swings the camera.
+renderer.domElement.addEventListener('pointermove', (event) => {
+  if (cameraMode !== 'look' || !waterClick || event.pointerId !== waterClick.id) return;
+  lookAround(-event.movementX * 0.006, event.movementY * 0.005);
+});
+
 renderer.domElement.addEventListener('pointerup', (event) => {
   const click = waterClick;
   waterClick = null;
@@ -429,10 +521,106 @@ renderer.domElement.addEventListener('pointercancel', () => {
   waterClick = null;
 });
 
+// SCREEN MESSAGE --------------------------------------------------------------
+// One overlay in the middle of the screen, for the edge warning and the respawn countdown.
+const screenMessage = document.createElement('div');
+screenMessage.className = 'screen-message';
+screenMessage.setAttribute('role', 'status');
+document.querySelector('#app').appendChild(screenMessage);
+let screenMessageText = null;
+
+// Pass null to hide the message.
+function showScreenMessage(text) {
+  if (text === screenMessageText) return;
+  screenMessageText = text;
+  if (text !== null) screenMessage.textContent = text;
+  screenMessage.classList.toggle('is-visible', text !== null);
+}
+
+// EDGE WARNING ----------------------------------------------------------------
+// Warn the player once the frog is within a few meters of the world edge.
+const edgeWarningDistance = 5;
+
+function frogDistanceToEdge() {
+  const { x, z } = frogPlacement.position;
+  return worldLimit - Math.max(Math.abs(x), Math.abs(z));
+}
+
+function edgeWarningText(distanceToEdge) {
+  if (distanceToEdge > edgeWarningDistance) return null;
+  // Count down in whole meters: 5, 4, 3, 2, 1.
+  const meters = Math.max(0, Math.ceil(distanceToEdge));
+  return `${meters} ${meters === 1 ? 'meter' : 'meters'} from the edge, turn back`;
+}
+
+// EXPLOSION AND RESPAWN -------------------------------------------------------
+// Touching the edge blows the frog up; after a countdown it respawns somewhere random.
+const explosionScale = 0.6;
+const respawnDelay = 5;
+let explosion = null;
+let respawnCountdown = null;
+
+loadExplosion(scene, explosionScale).then((loaded) => {
+  explosion = loaded;
+}).catch((error) => {
+  console.error('Could not load the explosion model:', error);
+});
+
+function startRespawnCountdown() {
+  respawnCountdown = respawnDelay;
+}
+
+function explodeFrog() {
+  frogExploded = true;
+  frogKeys.clear();
+  stopFrogWalk();
+  if (frogIsJumping) {
+    frogIsJumping = false;
+    for (const action of frogJumpActions) action.stop();
+  }
+  // Hide every frog model; the explosion takes its place.
+  frogPlacement.visible = false;
+  showScreenMessage(null);
+  // A reload during the countdown should not put the frog back on the edge.
+  clearFrogSave();
+  if (explosion) {
+    explosion.play(frogPlacement.position, startRespawnCountdown);
+  } else {
+    startRespawnCountdown();
+  }
+}
+
+function updateRespawn(delta) {
+  if (respawnCountdown === null) return;
+  respawnCountdown -= delta;
+  if (respawnCountdown > 0) {
+    showScreenMessage(`New frog in ${Math.ceil(respawnCountdown)}`);
+    return;
+  }
+
+  const spawn = swamp.randomSpawn();
+  frogPlacement.position.copy(spawn);
+  frogPlacement.rotation.y = Math.random() * Math.PI * 2;
+  frogGroundHeight = spawn.y;
+  frogSurfaceRole = 'ground';
+  frogPond = swamp.pondAt(spawn.x, spawn.z, spawn.y);
+  frogPlacement.visible = true;
+  frogExploded = false;
+  respawnCountdown = null;
+  showScreenMessage(null);
+  saveFrog();
+
+  // Jump the camera to the new spot instead of flying across the swamp.
+  cameraYaw = frogPlacement.rotation.y;
+  placeCamera(0, true);
+  camera.position.copy(cameraGoal);
+}
+
 // LOOP ------------------------------------------------------------------------
 placeCamera(0, true);
 camera.position.copy(cameraGoal);
 
+let lastSavedAt = 0;
 const animationTimer = new THREE.Timer();
 animationTimer.connect(document);
 renderer.setAnimationLoop(() => {
@@ -447,6 +635,20 @@ renderer.setAnimationLoop(() => {
 
   updateFrogWater(elapsed, moved > 0);
   showFrogModel();
+  explosion?.update(delta);
+  if (frogExploded) {
+    updateRespawn(delta);
+  } else {
+    const distanceToEdge = frogDistanceToEdge();
+    if (distanceToEdge <= 0) explodeFrog();
+    else showScreenMessage(edgeWarningText(distanceToEdge));
+  }
+
+  // Save now and then while playing, in case the tab is closed without a pagehide.
+  if (elapsed - lastSavedAt > 2) {
+    saveFrog();
+    lastSavedAt = elapsed;
+  }
 
   // Settle smoothly onto the surface below (terrain, lily pad, log or rock),
   // or float at the waterline while swimming.

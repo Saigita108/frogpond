@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Explosion GLB</title>
+<style>body{margin:0;background:#111}#i{position:fixed;top:8px;left:8px;color:#ccc;font:12px monospace}</style></head><body><div id="i"></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const r=new THREE.WebGLRenderer({antialias:true});r.setSize(innerWidth,innerHeight);document.body.appendChild(r.domElement);
+r.toneMapping=THREE.ACESFilmicToneMapping;
+const s=new THREE.Scene();s.background=new THREE.Color(0x1a2230);
+const c=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,0.1,100);c.position.set(4,1.6,4.6);
+const oc=new OrbitControls(c,r.domElement);oc.target.set(0,1,0);oc.update();
+s.add(new THREE.HemisphereLight(0x8899bb,0x221a10,1.2));
+const g=new THREE.Mesh(new THREE.PlaneGeometry(20,20),new THREE.MeshStandardMaterial({color:0x3a332c}));g.rotation.x=-Math.PI/2;s.add(g);
+let mixer,clip;const clock=new THREE.Clock();
+new GLTFLoader().load('explosion.glb',gl=>{s.add(gl.scene);mixer=new THREE.AnimationMixer(gl.scene);clip=gl.animations[0];
+ const a=mixer.clipAction(clip);a.play();
+ window.__info={clips:gl.animations.map(x=>x.name),dur:clip.duration,tracks:clip.tracks.length};
+ document.getElementById('i').textContent=`clip "${clip.name}" ${clip.duration.toFixed(2)}s, ${clip.tracks.length} tracks`;},
+ undefined,e=>{window.__err=String(e);document.getElementById('i').textContent='ERROR '+e});
+window.seek=t=>{mixer.setTime(t);r.render(s,c)};
+r.setAnimationLoop(()=>{if(mixer&&!window.paused)mixer.update(clock.getDelta());r.render(s,c)});
+</script></body></html>

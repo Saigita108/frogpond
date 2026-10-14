@@ -33,11 +33,13 @@ export function mountControlsHelp(app) {
     trackpad: [
       ...frogControls,
       ['Zoom', 'Pinch two fingers together or apart.'],
+      ['Look around', 'Pick <b>Look around</b> at the top left, then swipe with two fingers to swing the camera around the frog. Press <kbd>Esc</kbd> to go back to <b>Follow</b>.'],
       ['Make ripples', 'Click on the water.']
     ],
     mouse: [
       ...frogControls,
-      ['Zoom', 'Scroll the mouse wheel up or down.'],
+      ['Zoom', 'Scroll the mouse wheel up or down (in <b>Follow</b> mode).'],
+      ['Look around', 'Pick <b>Look around</b> at the top left, then drag with the left button to swing the camera around the frog. Press <kbd>Esc</kbd> to go back to <b>Follow</b>.'],
       ['Make ripples', 'Left-click on the water.']
     ]
   };
