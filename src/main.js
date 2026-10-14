@@ -88,13 +88,41 @@ const unfinishedJumpActions = new Set();
 const frogPlacement = new THREE.Group();
 scene.add(frogPlacement);
 
-// Drop the frog at a random spot in the swamp.
-const spawn = swamp.randomSpawn();
+// Remember where the frog was on this device, so a reload puts it back there.
+const frogSaveKey = 'frog-pond:frog';
+
+function loadFrogSave() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(frogSaveKey));
+    if (!saved || ![saved.x, saved.z, saved.rotation].every(Number.isFinite)) return null;
+    // The swamp may have changed since the save; only reuse spots that are still walkable.
+    const surface = swamp.probeSurface(saved.x, saved.z);
+    if (!surface) return null;
+    return { ...saved, surface };
+  } catch {
+    return null;
+  }
+}
+
+function saveFrog() {
+  try {
+    const { x, z } = frogPlacement.position;
+    localStorage.setItem(frogSaveKey, JSON.stringify({ x, z, rotation: frogPlacement.rotation.y }));
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data); the frog just won't be remembered.
+  }
+}
+
+// Drop the frog where it was last time, or at a random spot in the swamp.
+const savedFrog = loadFrogSave();
+const spawn = savedFrog
+  ? new THREE.Vector3(savedFrog.x, savedFrog.surface.height, savedFrog.z)
+  : swamp.randomSpawn();
 let frogGroundHeight = spawn.y;
-let frogSurfaceRole = 'ground';
+let frogSurfaceRole = savedFrog?.surface.role ?? 'ground';
 frogPlacement.position.copy(spawn);
-frogPlacement.rotation.y = Math.random() * Math.PI * 2;
-let frogPond = swamp.pondAt(spawn.x, spawn.z, spawn.y);
+frogPlacement.rotation.y = savedFrog?.rotation ?? Math.random() * Math.PI * 2;
+let frogPond = frogSurfaceRole === 'lily_pad' ? null : swamp.pondAt(spawn.x, spawn.z, spawn.y);
 let frogSpeed = 0;
 let lastRippleAt = 0;
 
@@ -327,8 +355,12 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => frogKeys.delete(event.code));
 window.addEventListener('blur', () => frogKeys.clear());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) frogKeys.clear();
+  if (document.hidden) {
+    frogKeys.clear();
+    saveFrog();
+  }
 });
+window.addEventListener('pagehide', saveFrog);
 
 // FOLLOW CAMERA ---------------------------------------------------------------
 // Sits behind the frog and swings around with it, like a third-person game camera.
@@ -433,6 +465,7 @@ renderer.domElement.addEventListener('pointercancel', () => {
 placeCamera(0, true);
 camera.position.copy(cameraGoal);
 
+let lastSavedAt = 0;
 const animationTimer = new THREE.Timer();
 animationTimer.connect(document);
 renderer.setAnimationLoop(() => {
@@ -447,6 +480,12 @@ renderer.setAnimationLoop(() => {
 
   updateFrogWater(elapsed, moved > 0);
   showFrogModel();
+
+  // Save now and then while playing, in case the tab is closed without a pagehide.
+  if (elapsed - lastSavedAt > 2) {
+    saveFrog();
+    lastSavedAt = elapsed;
+  }
 
   // Settle smoothly onto the surface below (terrain, lily pad, log or rock),
   // or float at the waterline while swimming.
