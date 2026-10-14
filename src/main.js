@@ -2,6 +2,7 @@ import './style.css'
 import { mountControlsHelp } from './controls-help.js'
 import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
 import { loadExplosion } from './explosion.js'
+import { loadFireflies } from './fireflies.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -9,6 +10,7 @@ import frogModelUrl from './assets/models/frog-eyes.glb?url'
 import frogJumpModelUrl from './assets/models/frog-jump-fixed.glb?url'
 import frogWalkModelUrl from './assets/models/frog-walk.glb?url'
 import frogSwimModelUrl from './assets/models/frog-swim.glb?url'
+import frogTongueModelUrl from './assets/models/frog-tongue.glb?url'
 
 mountControlsHelp(document.querySelector('#app'));
 
@@ -62,6 +64,11 @@ const frogWalkActions = [];
 let swimFrog = null;
 let frogSwimMixer = null;
 const frogSwimActions = [];
+let tongueFrog = null;
+let frogTongueMixer = null;
+let frogIsStriking = false;
+const frogTongueActions = [];
+const unfinishedTongueActions = new Set();
 const frogKeys = new Set();
 const frogMovementKeys = new Set([
   'KeyW', 'ArrowUp', 'KeyS', 'ArrowDown',
@@ -208,16 +215,61 @@ frogLoader.loadAsync(frogSwimModelUrl).then((gltf) => {
   console.error('Could not load the swim model:', error);
 });
 
+// The tongue rig hangs off tongue_aim: rotating it aims the tongue, scaling its z stretches it.
+let tongueAim = null;
+let tongueTip = null;
+// How far the tip sits in front of tongue_aim at full stretch, in tongue_aim's units.
+let tongueReach = 1;
+// TongueStrike: the tongue is fully out at tongueHitTime and back in the closed mouth by tongueSwallowTime.
+const tongueHitTime = 0.42;
+const tongueSwallowTime = 0.75;
+
+frogLoader.loadAsync(frogTongueModelUrl).then((gltf) => {
+  tongueFrog = prepareFrog(gltf);
+  tongueFrog.visible = false;
+  tongueAim = tongueFrog.getObjectByName('tongue_aim');
+  tongueTip = tongueFrog.getObjectByName('tongue_9');
+  // The stretched tongue leaves the skinned mesh's bounds; don't let it get culled.
+  tongueFrog.traverse((object) => {
+    if (object.isSkinnedMesh) object.frustumCulled = false;
+  });
+  frogTongueMixer = new THREE.AnimationMixer(tongueFrog);
+  for (const clip of gltf.animations) {
+    const action = frogTongueMixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    frogTongueActions.push(action);
+  }
+  frogTongueMixer.addEventListener('finished', ({ action }) => {
+    unfinishedTongueActions.delete(action);
+    if (frogIsStriking && unfinishedTongueActions.size === 0) finishFrogTongue();
+  });
+  if (!tongueAim || !tongueTip || frogTongueActions.length === 0) {
+    console.warn('frog-tongue.glb needs the tongue_aim and tongue_9 bones and the TongueStrike animation.');
+    return;
+  }
+
+  // Measure the tongue at full stretch, so it can be stretched to exactly reach a firefly.
+  for (const action of frogTongueActions) action.play();
+  frogTongueMixer.setTime(tongueHitTime);
+  tongueReach = tongueAim.worldToLocal(tongueTip.getWorldPosition(new THREE.Vector3())).z;
+  for (const action of frogTongueActions) action.stop();
+}).catch((error) => {
+  console.error('Could not load the tongue model:', error);
+});
+
 const frogIsSwimming = () => Boolean(frogPond && swimFrog && frogSwimActions.length && !frogIsJumping);
 
-// Show exactly one model: jump, swim (whenever the frog is in water), walk or idle.
+// Show exactly one model: jump, tongue, swim (whenever the frog is in water), walk or idle.
 function showFrogModel() {
   if (!idleFrog) return;
   const swimming = frogIsSwimming();
   if (jumpFrog) jumpFrog.visible = frogIsJumping;
+  if (tongueFrog) tongueFrog.visible = frogIsStriking;
   if (swimFrog) swimFrog.visible = swimming;
-  if (walkFrog) walkFrog.visible = !frogIsJumping && !swimming && frogWalkDirection !== 0;
-  idleFrog.visible = !frogIsJumping && !swimming && frogWalkDirection === 0;
+  const standing = !frogIsJumping && !frogIsStriking && !swimming;
+  if (walkFrog) walkFrog.visible = standing && frogWalkDirection !== 0;
+  idleFrog.visible = standing && frogWalkDirection === 0;
 }
 
 // Move the frog over the swamp surfaces, blocked by trunks, steep rocks and the world edge.
@@ -282,7 +334,8 @@ function stopFrogWalk() {
 }
 
 function updateFrogMovement(delta) {
-  if (!idleFrog || frogExploded) return 0;
+  // The frog holds still while its tongue is out.
+  if (!idleFrog || frogExploded || frogIsStriking) return 0;
   const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
@@ -333,7 +386,7 @@ function updateFrogMovement(delta) {
 }
 
 function startFrogJump() {
-  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogExploded) return;
+  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded) return;
   frogIsJumping = true;
   stopFrogWalk();
   showFrogModel();
@@ -352,8 +405,134 @@ function finishFrogJump() {
   showFrogModel();
 }
 
+// FIREFLIES AND TONGUE -------------------------------------------------------
+// Fireflies flutter around the frog's starting spot; F flicks the tongue to eat one.
+const fireflyCount = 10;
+const fireflyRadius = 10;
+// A firefly can be eaten when it is this close to the mouth and roughly in front of the frog.
+const tongueRange = 1;
+const tongueAimAngle = THREE.MathUtils.degToRad(35);
+let fireflies = null;
+// The firefly the tongue is flying at, and the one stuck to it on the way back.
+let tongueTarget = null;
+let tongueCatch = null;
+let tongueHasHit = false;
+const mouthPosition = new THREE.Vector3();
+const fireflyPosition = new THREE.Vector3();
+const tongueAimPoint = new THREE.Vector3();
+const tongueForward = new THREE.Vector3(0, 0, 1);
+const tongueAimRotation = new THREE.Quaternion();
+const tongueAimScale = new THREE.Vector3();
+
+loadFireflies(scene, swamp, spawn, fireflyCount, fireflyRadius).then((loaded) => {
+  fireflies = loaded;
+}).catch((error) => {
+  console.error('Could not load the fireflies:', error);
+});
+
+// Distance from the mouth to a flying firefly in front of the frog, or null if it is out of reach.
+function tongueDistanceTo(firefly) {
+  if (firefly.state !== 'flying') return null;
+  tongueAim.getWorldPosition(mouthPosition);
+  fireflies.bodyPosition(firefly, fireflyPosition);
+  const distance = mouthPosition.distanceTo(fireflyPosition);
+  const heading = Math.atan2(fireflyPosition.x - mouthPosition.x, fireflyPosition.z - mouthPosition.z);
+  const offAim = Math.atan2(
+    Math.sin(heading - frogPlacement.rotation.y),
+    Math.cos(heading - frogPlacement.rotation.y)
+  );
+  return distance <= tongueRange && Math.abs(offAim) <= tongueAimAngle ? distance : null;
+}
+
+function nearestFireflyInReach() {
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const firefly of fireflies?.fireflies ?? []) {
+    const distance = tongueDistanceTo(firefly);
+    if (distance !== null && distance < nearestDistance) {
+      nearest = firefly;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+// Point the tongue at the target firefly (or straight ahead) and stretch it to reach that point.
+function aimTongue() {
+  if (tongueTarget) {
+    fireflies.bodyPosition(tongueTarget, tongueAimPoint);
+  } else {
+    tongueAim.getWorldPosition(tongueAimPoint);
+    tongueAimPoint.x += Math.sin(frogPlacement.rotation.y) * tongueRange;
+    tongueAimPoint.z += Math.cos(frogPlacement.rotation.y) * tongueRange;
+  }
+  tongueAim.parent.worldToLocal(tongueAimPoint).sub(tongueAim.position);
+  const stretch = tongueAimPoint.length() / tongueReach;
+  tongueAim.quaternion.setFromUnitVectors(tongueForward, tongueAimPoint.normalize());
+  tongueAim.scale.set(1, 1, stretch);
+}
+
+function startFrogTongue() {
+  if (!idleFrog || !tongueAim || frogTongueActions.length === 0) return;
+  // No tongue while jumping, or while swimming with the mouth in the water.
+  if (frogIsStriking || frogIsJumping || frogExploded || frogIsSwimming()) return;
+  frogIsStriking = true;
+  stopFrogWalk();
+  showFrogModel();
+  tongueTarget = nearestFireflyInReach();
+  tongueCatch = null;
+  tongueHasHit = false;
+  unfinishedTongueActions.clear();
+  for (const action of frogTongueActions) {
+    unfinishedTongueActions.add(action);
+    action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+  }
+  updateFrogTongue(0);
+}
+
+function updateFrogTongue(delta) {
+  if (!frogIsStriking) return;
+  // The mixer resets tongue_aim every update, so the aim is applied again afterwards.
+  tongueAimRotation.copy(tongueAim.quaternion);
+  tongueAimScale.copy(tongueAim.scale);
+  frogTongueMixer.update(delta);
+  const time = frogTongueActions[0].time;
+
+  if (!tongueHasHit) {
+    // Follow the firefly until the tongue reaches it.
+    aimTongue();
+    if (time >= tongueHitTime) {
+      tongueHasHit = true;
+      // It may have fluttered out of reach while the tongue was on its way.
+      if (tongueTarget && tongueDistanceTo(tongueTarget) !== null) tongueCatch = tongueTarget;
+      tongueTarget = null;
+    }
+  } else {
+    tongueAim.quaternion.copy(tongueAimRotation);
+    tongueAim.scale.copy(tongueAimScale);
+  }
+
+  if (!tongueCatch) return;
+  if (time >= tongueSwallowTime) {
+    fireflies.swallow(tongueCatch);
+    tongueCatch = null;
+  } else {
+    // Stuck to the tip, it gets pulled back into the mouth.
+    fireflies.holdAt(tongueCatch, tongueTip.getWorldPosition(fireflyPosition));
+  }
+}
+
+function finishFrogTongue() {
+  frogIsStriking = false;
+  if (tongueCatch) fireflies.swallow(tongueCatch);
+  tongueCatch = null;
+  tongueTarget = null;
+  for (const action of frogTongueActions) action.stop();
+  showFrogModel();
+}
+
 window.addEventListener('keydown', (event) => {
-  if ((!frogMovementKeys.has(event.code) && event.code !== 'Space') || event.defaultPrevented) return;
+  if ((!frogMovementKeys.has(event.code) && event.code !== 'Space' && event.code !== 'KeyF') || event.defaultPrevented) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target?.isContentEditable || event.target?.closest?.(
     'input, textarea, select, button, a[href], [role="button"]'
@@ -361,6 +540,8 @@ window.addEventListener('keydown', (event) => {
   event.preventDefault();
   if (event.code === 'Space') {
     if (!event.repeat) startFrogJump();
+  } else if (event.code === 'KeyF') {
+    if (!event.repeat) startFrogTongue();
   } else {
     frogKeys.add(event.code);
   }
@@ -631,6 +812,8 @@ renderer.setAnimationLoop(() => {
   frogMixer?.update(delta);
   const moved = updateFrogMovement(delta);
   if (frogIsJumping) frogJumpMixer.update(delta);
+  updateFrogTongue(delta);
+  fireflies?.update(delta);
   frogSpeed = delta > 0 ? moved / delta : 0;
 
   updateFrogWater(elapsed, moved > 0);

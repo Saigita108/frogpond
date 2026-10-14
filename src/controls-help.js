@@ -27,7 +27,8 @@ export function mountControlsHelp(app) {
   const frogControls = [
     ['Walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
     ['Turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>. The camera swings around with the frog.'],
-    ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.']
+    ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.'],
+    ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1 meter in front of the frog.']
   ];
   const guides = {
     trackpad: [
