@@ -1,6 +1,7 @@
 import './style.css'
 import { mountControlsHelp } from './controls-help.js'
 import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
+import { loadExplosion } from './explosion.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -48,6 +49,8 @@ const swamp = await loadSwamp(scene);
 
 // Keep placement separate from the model's animated transforms.
 let frogMixer = null;
+// True from the moment the frog explodes at the world edge until it respawns.
+let frogExploded = false;
 let idleFrog = null;
 let jumpFrog = null;
 let frogJumpMixer = null;
@@ -106,11 +109,21 @@ function loadFrogSave() {
 }
 
 function saveFrog() {
+  // An exploded frog has no position worth keeping; it respawns somewhere random.
+  if (frogExploded) return;
   try {
     const { x, z } = frogPlacement.position;
     localStorage.setItem(frogSaveKey, JSON.stringify({ x, z, rotation: frogPlacement.rotation.y }));
   } catch {
     // Storage can be unavailable (private mode, blocked site data); the frog just won't be remembered.
+  }
+}
+
+function clearFrogSave() {
+  try {
+    localStorage.removeItem(frogSaveKey);
+  } catch {
+    // Nothing was saved if storage is unavailable.
   }
 }
 
@@ -269,7 +282,7 @@ function stopFrogWalk() {
 }
 
 function updateFrogMovement(delta) {
-  if (!idleFrog) return 0;
+  if (!idleFrog || frogExploded) return 0;
   const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
@@ -320,7 +333,7 @@ function updateFrogMovement(delta) {
 }
 
 function startFrogJump() {
-  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping) return;
+  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogExploded) return;
   frogIsJumping = true;
   stopFrogWalk();
   showFrogModel();
@@ -508,31 +521,99 @@ renderer.domElement.addEventListener('pointercancel', () => {
   waterClick = null;
 });
 
+// SCREEN MESSAGE --------------------------------------------------------------
+// One overlay in the middle of the screen, for the edge warning and the respawn countdown.
+const screenMessage = document.createElement('div');
+screenMessage.className = 'screen-message';
+screenMessage.setAttribute('role', 'status');
+document.querySelector('#app').appendChild(screenMessage);
+let screenMessageText = null;
+
+// Pass null to hide the message.
+function showScreenMessage(text) {
+  if (text === screenMessageText) return;
+  screenMessageText = text;
+  if (text !== null) screenMessage.textContent = text;
+  screenMessage.classList.toggle('is-visible', text !== null);
+}
+
 // EDGE WARNING ----------------------------------------------------------------
 // Warn the player once the frog is within a few meters of the world edge.
 const edgeWarningDistance = 5;
-const edgeWarning = document.createElement('div');
-edgeWarning.className = 'edge-warning';
-edgeWarning.setAttribute('role', 'status');
-document.querySelector('#app').appendChild(edgeWarning);
-let edgeWarningShown = false;
-let edgeWarningMeters = null;
 
-function updateEdgeWarning() {
+function frogDistanceToEdge() {
   const { x, z } = frogPlacement.position;
-  const distanceToEdge = worldLimit - Math.max(Math.abs(x), Math.abs(z));
-  const show = distanceToEdge <= edgeWarningDistance;
-  if (show) {
-    // Count down in whole meters: 5, 4, 3, 2, 1, 0.
-    const meters = Math.max(0, Math.ceil(distanceToEdge));
-    if (meters !== edgeWarningMeters) {
-      edgeWarningMeters = meters;
-      edgeWarning.textContent = `${meters} ${meters === 1 ? 'meter' : 'meters'} from the edge, turn back`;
-    }
+  return worldLimit - Math.max(Math.abs(x), Math.abs(z));
+}
+
+function edgeWarningText(distanceToEdge) {
+  if (distanceToEdge > edgeWarningDistance) return null;
+  // Count down in whole meters: 5, 4, 3, 2, 1.
+  const meters = Math.max(0, Math.ceil(distanceToEdge));
+  return `${meters} ${meters === 1 ? 'meter' : 'meters'} from the edge, turn back`;
+}
+
+// EXPLOSION AND RESPAWN -------------------------------------------------------
+// Touching the edge blows the frog up; after a countdown it respawns somewhere random.
+const explosionScale = 0.6;
+const respawnDelay = 5;
+let explosion = null;
+let respawnCountdown = null;
+
+loadExplosion(scene, explosionScale).then((loaded) => {
+  explosion = loaded;
+}).catch((error) => {
+  console.error('Could not load the explosion model:', error);
+});
+
+function startRespawnCountdown() {
+  respawnCountdown = respawnDelay;
+}
+
+function explodeFrog() {
+  frogExploded = true;
+  frogKeys.clear();
+  stopFrogWalk();
+  if (frogIsJumping) {
+    frogIsJumping = false;
+    for (const action of frogJumpActions) action.stop();
   }
-  if (show === edgeWarningShown) return;
-  edgeWarningShown = show;
-  edgeWarning.classList.toggle('is-visible', show);
+  // Hide every frog model; the explosion takes its place.
+  frogPlacement.visible = false;
+  showScreenMessage(null);
+  // A reload during the countdown should not put the frog back on the edge.
+  clearFrogSave();
+  if (explosion) {
+    explosion.play(frogPlacement.position, startRespawnCountdown);
+  } else {
+    startRespawnCountdown();
+  }
+}
+
+function updateRespawn(delta) {
+  if (respawnCountdown === null) return;
+  respawnCountdown -= delta;
+  if (respawnCountdown > 0) {
+    showScreenMessage(`New frog in ${Math.ceil(respawnCountdown)}`);
+    return;
+  }
+
+  const spawn = swamp.randomSpawn();
+  frogPlacement.position.copy(spawn);
+  frogPlacement.rotation.y = Math.random() * Math.PI * 2;
+  frogGroundHeight = spawn.y;
+  frogSurfaceRole = 'ground';
+  frogPond = swamp.pondAt(spawn.x, spawn.z, spawn.y);
+  frogPlacement.visible = true;
+  frogExploded = false;
+  respawnCountdown = null;
+  showScreenMessage(null);
+  saveFrog();
+
+  // Jump the camera to the new spot instead of flying across the swamp.
+  cameraYaw = frogPlacement.rotation.y;
+  placeCamera(0, true);
+  camera.position.copy(cameraGoal);
 }
 
 // LOOP ------------------------------------------------------------------------
@@ -554,7 +635,14 @@ renderer.setAnimationLoop(() => {
 
   updateFrogWater(elapsed, moved > 0);
   showFrogModel();
-  updateEdgeWarning();
+  explosion?.update(delta);
+  if (frogExploded) {
+    updateRespawn(delta);
+  } else {
+    const distanceToEdge = frogDistanceToEdge();
+    if (distanceToEdge <= 0) explodeFrog();
+    else showScreenMessage(edgeWarningText(distanceToEdge));
+  }
 
   // Save now and then while playing, in case the tab is closed without a pagehide.
   if (elapsed - lastSavedAt > 2) {
