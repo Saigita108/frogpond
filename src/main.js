@@ -4,6 +4,7 @@ import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
 import { loadExplosion } from './explosion.js'
 import { loadFireflies } from './fireflies.js'
 import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
+import { loadBestTime, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveNightTime } from './night.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -38,7 +39,8 @@ await renderer.init();
 camera.coordinateSystem = renderer.coordinateSystem;
 camera.updateProjectionMatrix();
 
-scene.add(new THREE.HemisphereLight(0x9fb4e0, 0x2a3324, 1.4));
+const hemisphereLight = new THREE.HemisphereLight(0x9fb4e0, 0x2a3324, 1.4);
+scene.add(hemisphereLight);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -80,6 +82,13 @@ const frogRadius = 0.25;
 const frogWalkSpeed = 0.9;
 // The walk cycle was timed for 0.85 m/s at scale 0.5; match the feet to the speed.
 const frogWalkTimeScale = frogWalkSpeed / (0.85 * frogScale / 0.5);
+// Double-tap forward and hold the second press to run (or swim fast): twice the speed and
+// twice the walk or swim cycle.
+const frogRunMultiplier = 2;
+const frogDoubleTapWindow = 300; // milliseconds between the two presses
+let frogRunning = false;
+let lastForwardTapAt = -Infinity;
+const isForwardKey = (code) => code === 'KeyW' || code === 'ArrowUp';
 const frogTurnSpeed = Math.PI * 0.75;
 // Stroke rate while swimming, and a slow paddle while floating in place.
 const frogSwimTimeScale = 1;
@@ -380,14 +389,16 @@ function updateFrogMovement(delta) {
   }
 
   const direction = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
+  // Running (and fast swimming) only works forward.
+  const run = direction > 0 && frogRunning ? frogRunMultiplier : 1;
   if (frogIsSwimming()) {
     // In water the swim model replaces both idle and walk.
     if (frogWalkDirection) stopFrogWalk();
     for (const action of frogSwimActions) {
-      action.setEffectiveTimeScale(direction ? direction * frogSwimTimeScale : frogFloatTimeScale);
+      action.setEffectiveTimeScale(direction ? direction * frogSwimTimeScale * run : frogFloatTimeScale);
     }
     frogSwimMixer.update(delta);
-    return moveFrog(direction * frogWalkSpeed * speedMultiplier * delta, false);
+    return moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
   }
   if (!direction || !walkFrog || frogWalkActions.length === 0) {
     if (frogWalkDirection) stopFrogWalk();
@@ -406,10 +417,10 @@ function updateFrogMovement(delta) {
     frogWalkDirection = direction;
   }
   for (const action of frogWalkActions) {
-    action.setEffectiveTimeScale(direction * frogWalkTimeScale * speedMultiplier);
+    action.setEffectiveTimeScale(direction * frogWalkTimeScale * speedMultiplier * run);
   }
   frogWalkMixer.update(delta);
-  return moveFrog(direction * frogWalkSpeed * speedMultiplier * delta, false);
+  return moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
 }
 
 function startFrogJump() {
@@ -432,9 +443,83 @@ function finishFrogJump() {
   showFrogModel();
 }
 
+// NIGHT -----------------------------------------------------------------------
+// Race the night: eat every firefly before sunrise. The clock starts with the frog's first
+// move, survives a reload, and a new frog starts a new night.
+const nightLength = 180;
+let nightTime = loadNightTime();
+let nightStarted = nightTime > 0;
+// 'won' or 'sunrise' once the night has ended, otherwise null.
+let nightResult = null;
+let bestTime = loadBestTime();
+const setNightClock = mountNightClock(document.querySelector('#app'), nightLength);
+const endCard = mountEndCard(document.querySelector('#app'), (event) => {
+  resetGame();
+  if (event.detail > 0) event.currentTarget.blur();
+});
+
+// Dawn colors for the fog and the ambient light; the sky dome and water change in swamp.js.
+const nightSky = new THREE.Color(nightColor);
+const dawnSky = new THREE.Color(0x8d8fb5);
+const nightAmbient = new THREE.Color(0x9fb4e0);
+const dawnAmbient = new THREE.Color(0xffd2b0);
+
+function startNight() {
+  if (!nightStarted && !nightResult && !frogExploded) nightStarted = true;
+}
+
+// restoring: showing a night that ended before a reload, whose best time was already recorded.
+function endNight(won, restoring = false) {
+  nightResult = won ? 'won' : 'sunrise';
+  saveNightTime(nightTime);
+  const newBest = won && !restoring && (bestTime === null || nightTime < bestTime);
+  if (newBest) {
+    bestTime = nightTime;
+    saveBestTime(bestTime);
+  }
+  endCard.show({
+    won,
+    eaten: firefliesEaten,
+    total: fireflyCount,
+    time: nightTime,
+    bestTime,
+    newBest
+  });
+}
+
+function startNewNight() {
+  nightTime = 0;
+  nightStarted = false;
+  nightResult = null;
+  saveNightTime(0);
+  endCard.hide();
+}
+
+function updateNight(delta) {
+  if (nightStarted && !nightResult && !frogExploded) {
+    nightTime = Math.min(nightTime + delta, nightLength);
+    if (nightTime >= nightLength) endNight(false);
+  }
+  const progress = nightTime / nightLength;
+  // The sky starts to lighten a little over a minute in, and is fully lit at sunrise.
+  const dawn = THREE.MathUtils.smoothstep(progress, 0.4, 1);
+  scene.background.lerpColors(nightSky, dawnSky, dawn);
+  scene.fog.color.copy(scene.background);
+  hemisphereLight.color.lerpColors(nightAmbient, dawnAmbient, dawn);
+  hemisphereLight.intensity = THREE.MathUtils.lerp(1.4, 2.4, dawn);
+  swamp.setDawn(dawn);
+  fireflies?.dawn(progress, delta);
+  const state = nightResult ?? (nightStarted ? 'running' : 'waiting');
+  setNightClock(nightTime, state);
+}
+
+window.addEventListener('pagehide', () => {
+  if (!frogExploded) saveNightTime(nightTime);
+});
+
 // FIREFLIES AND TONGUE -------------------------------------------------------
 // Fireflies flutter all over the swamp; F flicks the tongue to eat one.
-const fireflyCount = 30;
+const fireflyCount = 10;
 // Keep them clear of the edge warning zone, so none is lost to the explosion.
 const fireflyMargin = 26;
 // A firefly can be eaten when it is this close to the mouth and roughly in front of the frog.
@@ -444,6 +529,9 @@ let fireflies = null;
 // Eaten fireflies stay eaten across reloads; a new frog after an explosion starts over at 0.
 let firefliesEaten = loadFirefliesEaten(fireflyCount);
 const setFireflyMeter = mountFireflyMeter(document.querySelector('#app'), fireflyCount, firefliesEaten);
+// A night that ended before a reload shows its result again.
+if (firefliesEaten >= fireflyCount) endNight(true, true);
+else if (nightTime >= nightLength) endNight(false, true);
 // The firefly the tongue is flying at, and the one stuck to it on the way back.
 let tongueTarget = null;
 let tongueCatch = null;
@@ -507,7 +595,8 @@ function aimTongue() {
 
 function startFrogTongue() {
   if (!idleFrog || !tongueAim || frogTongueActions.length === 0) return;
-  if (frogIsStriking || frogIsJumping || frogExploded) return;
+  // Once the night is over the score is final.
+  if (frogIsStriking || frogIsJumping || frogExploded || nightResult) return;
   if (frogIsSwimming()) swamp.addRipple(frogPlacement.position.x, frogPlacement.position.z, 0.8);
   frogIsStriking = true;
   stopFrogWalk();
@@ -560,6 +649,7 @@ function swallowFirefly() {
   firefliesEaten += 1;
   saveFirefliesEaten(firefliesEaten);
   setFireflyMeter(firefliesEaten);
+  if (firefliesEaten >= fireflyCount && !nightResult) endNight(true);
 }
 
 function finishFrogTongue() {
@@ -577,17 +667,29 @@ window.addEventListener('keydown', (event) => {
     'input, textarea, select, button, a[href], [role="button"]'
   )) return;
   event.preventDefault();
+  startNight();
   if (event.code === 'Space') {
     if (!event.repeat) startFrogJump();
   } else if (event.code === 'KeyF') {
     if (!event.repeat) startFrogTongue();
   } else {
+    if (isForwardKey(event.code) && !event.repeat) {
+      frogRunning = event.timeStamp - lastForwardTapAt < frogDoubleTapWindow;
+      lastForwardTapAt = event.timeStamp;
+    }
     frogKeys.add(event.code);
   }
 });
 
-window.addEventListener('keyup', (event) => frogKeys.delete(event.code));
-window.addEventListener('blur', () => frogKeys.clear());
+window.addEventListener('keyup', (event) => {
+  frogKeys.delete(event.code);
+  // Letting go of forward stops the run (unless the other forward key is still held).
+  if (isForwardKey(event.code) && !frogKeys.has('KeyW') && !frogKeys.has('ArrowUp')) frogRunning = false;
+});
+window.addEventListener('blur', () => {
+  frogKeys.clear();
+  frogRunning = false;
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     frogKeys.clear();
@@ -806,6 +908,7 @@ function explodeFrog() {
   // and brings a new frog with an empty belly.
   clearFrogSave();
   saveFirefliesEaten(0);
+  saveNightTime(0);
   if (explosion) {
     explosion.play(frogPlacement.position, startRespawnCountdown);
   } else {
@@ -823,7 +926,7 @@ function updateRespawn(delta) {
   spawnNewFrog();
 }
 
-// A fresh frog at a random spot, with an empty meter and a full swarm of fireflies.
+// A fresh frog at a random spot, with an empty meter, a full swarm of fireflies and a new night.
 function spawnNewFrog() {
   const spawn = swamp.randomSpawn();
   frogPlacement.position.copy(spawn);
@@ -841,6 +944,7 @@ function spawnNewFrog() {
   saveFirefliesEaten(0);
   setFireflyMeter(0);
   fireflies?.scatter(fireflyCount, fireflyMargin);
+  startNewNight();
 
   // Jump the camera to the new spot instead of flying across the swamp.
   cameraYaw = frogPlacement.rotation.y;
@@ -866,7 +970,7 @@ const resetButton = document.createElement('button');
 resetButton.type = 'button';
 resetButton.className = 'reset-button';
 resetButton.textContent = 'Reset';
-resetButton.title = 'Start over with a new frog and all fireflies back';
+resetButton.title = 'Start a new night with a new frog and all fireflies back';
 resetButton.addEventListener('click', (event) => {
   resetGame();
   // A mouse click shouldn't leave focus here, or the frog's keys would be ignored.
@@ -891,6 +995,7 @@ renderer.setAnimationLoop(() => {
   if (frogIsJumping) frogJumpMixer.update(delta);
   updateFrogTongue(delta);
   fireflies?.update(delta, frogPlacement.position);
+  updateNight(delta);
   frogSpeed = delta > 0 ? moved / delta : 0;
 
   updateFrogWater(elapsed, moved > 0);
@@ -907,6 +1012,7 @@ renderer.setAnimationLoop(() => {
   // Save now and then while playing, in case the tab is closed without a pagehide.
   if (elapsed - lastSavedAt > 2) {
     saveFrog();
+    if (!frogExploded && !nightResult) saveNightTime(nightTime);
     lastSavedAt = elapsed;
   }
 

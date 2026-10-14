@@ -13,7 +13,7 @@ export function mountControlsHelp(app) {
         <button class="close-button" type="button" aria-label="Close swamp controls">×</button>
       </div>
       <h2>Explore the swamp</h2>
-      <p class="controls-intro">Hop around the swamp, the camera follows your frog.</p>
+      <p class="controls-intro">Eat all 10 fireflies before the sun comes up. The night starts when you first move, and the camera follows your frog.</p>
       <dl class="shortcut-list"></dl>
       <p class="controls-footer">Press <kbd>Esc</kbd> to close</p>
     </section>
@@ -26,6 +26,7 @@ export function mountControlsHelp(app) {
   const shortcuts = menu.querySelector('.shortcut-list');
   const frogControls = [
     ['Walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
+    ['Run', 'Double-tap <kbd>W</kbd> / <kbd>↑</kbd> and hold the second press to run at twice the speed. In the water the frog swims twice as fast.'],
     ['Turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>. The camera swings around with the frog.'],
     ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.'],
     ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1 meter in front of the frog.']
