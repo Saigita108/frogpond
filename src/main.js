@@ -3,6 +3,7 @@ import { mountControlsHelp } from './controls-help.js'
 import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
 import { loadExplosion } from './explosion.js'
 import { loadFireflies } from './fireflies.js'
+import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -87,6 +88,8 @@ const frogFloatTimeScale = 0.45;
 const frogSwimHeight = -0.22;
 // How far a swimming frog may sink below the pond floor (the shallow edges).
 const frogSwimSink = 0.1;
+// Flicking the tongue in water, the frog rises until its mouth is just above the surface.
+const frogStrikeWaterHeight = -0.1;
 // The jump clip lifts the frog in place; move it forward while it is airborne.
 const frogJumpDistance = 1.6;
 const frogJumpAirborne = [1.05, 2.0];
@@ -263,7 +266,8 @@ const frogIsSwimming = () => Boolean(frogPond && swimFrog && frogSwimActions.len
 // Show exactly one model: jump, tongue, swim (whenever the frog is in water), walk or idle.
 function showFrogModel() {
   if (!idleFrog) return;
-  const swimming = frogIsSwimming();
+  // In water the tongue model takes over from the swim model while the tongue is out.
+  const swimming = frogIsSwimming() && !frogIsStriking;
   if (jumpFrog) jumpFrog.visible = frogIsJumping;
   if (tongueFrog) tongueFrog.visible = frogIsStriking;
   if (swimFrog) swimFrog.visible = swimming;
@@ -406,13 +410,17 @@ function finishFrogJump() {
 }
 
 // FIREFLIES AND TONGUE -------------------------------------------------------
-// Fireflies flutter around the frog's starting spot; F flicks the tongue to eat one.
-const fireflyCount = 10;
-const fireflyRadius = 10;
+// Fireflies flutter all over the swamp; F flicks the tongue to eat one.
+const fireflyCount = 30;
+// Keep them clear of the edge warning zone, so none is lost to the explosion.
+const fireflyMargin = 26;
 // A firefly can be eaten when it is this close to the mouth and roughly in front of the frog.
 const tongueRange = 1;
 const tongueAimAngle = THREE.MathUtils.degToRad(35);
 let fireflies = null;
+// Eaten fireflies stay eaten across reloads; a new frog after an explosion starts over at 0.
+let firefliesEaten = loadFirefliesEaten(fireflyCount);
+const setFireflyMeter = mountFireflyMeter(document.querySelector('#app'), fireflyCount, firefliesEaten);
 // The firefly the tongue is flying at, and the one stuck to it on the way back.
 let tongueTarget = null;
 let tongueCatch = null;
@@ -424,8 +432,10 @@ const tongueForward = new THREE.Vector3(0, 0, 1);
 const tongueAimRotation = new THREE.Quaternion();
 const tongueAimScale = new THREE.Vector3();
 
-loadFireflies(scene, swamp, spawn, fireflyCount, fireflyRadius).then((loaded) => {
+loadFireflies(scene, swamp).then((loaded) => {
   fireflies = loaded;
+  // Only the fireflies this frog hasn't eaten yet come back after a reload.
+  fireflies.scatter(fireflyCount - firefliesEaten, fireflyMargin);
 }).catch((error) => {
   console.error('Could not load the fireflies:', error);
 });
@@ -474,8 +484,8 @@ function aimTongue() {
 
 function startFrogTongue() {
   if (!idleFrog || !tongueAim || frogTongueActions.length === 0) return;
-  // No tongue while jumping, or while swimming with the mouth in the water.
-  if (frogIsStriking || frogIsJumping || frogExploded || frogIsSwimming()) return;
+  if (frogIsStriking || frogIsJumping || frogExploded) return;
+  if (frogIsSwimming()) swamp.addRipple(frogPlacement.position.x, frogPlacement.position.z, 0.8);
   frogIsStriking = true;
   stopFrogWalk();
   showFrogModel();
@@ -514,18 +524,24 @@ function updateFrogTongue(delta) {
 
   if (!tongueCatch) return;
   if (time >= tongueSwallowTime) {
-    fireflies.swallow(tongueCatch);
-    tongueCatch = null;
+    swallowFirefly();
   } else {
     // Stuck to the tip, it gets pulled back into the mouth.
     fireflies.holdAt(tongueCatch, tongueTip.getWorldPosition(fireflyPosition));
   }
 }
 
+function swallowFirefly() {
+  fireflies.swallow(tongueCatch);
+  tongueCatch = null;
+  firefliesEaten += 1;
+  saveFirefliesEaten(firefliesEaten);
+  setFireflyMeter(firefliesEaten);
+}
+
 function finishFrogTongue() {
   frogIsStriking = false;
-  if (tongueCatch) fireflies.swallow(tongueCatch);
-  tongueCatch = null;
+  if (tongueCatch) swallowFirefly();
   tongueTarget = null;
   for (const action of frogTongueActions) action.stop();
   showFrogModel();
@@ -762,8 +778,10 @@ function explodeFrog() {
   // Hide every frog model; the explosion takes its place.
   frogPlacement.visible = false;
   showScreenMessage(null);
-  // A reload during the countdown should not put the frog back on the edge.
+  // A reload during the countdown should not put the frog back on the edge,
+  // and brings a new frog with an empty belly.
   clearFrogSave();
+  saveFirefliesEaten(0);
   if (explosion) {
     explosion.play(frogPlacement.position, startRespawnCountdown);
   } else {
@@ -778,7 +796,11 @@ function updateRespawn(delta) {
     showScreenMessage(`New frog in ${Math.ceil(respawnCountdown)}`);
     return;
   }
+  spawnNewFrog();
+}
 
+// A fresh frog at a random spot, with an empty meter and a full swarm of fireflies.
+function spawnNewFrog() {
   const spawn = swamp.randomSpawn();
   frogPlacement.position.copy(spawn);
   frogPlacement.rotation.y = Math.random() * Math.PI * 2;
@@ -791,11 +813,42 @@ function updateRespawn(delta) {
   showScreenMessage(null);
   saveFrog();
 
+  firefliesEaten = 0;
+  saveFirefliesEaten(0);
+  setFireflyMeter(0);
+  fireflies?.scatter(fireflyCount, fireflyMargin);
+
   // Jump the camera to the new spot instead of flying across the swamp.
   cameraYaw = frogPlacement.rotation.y;
   placeCamera(0, true);
   camera.position.copy(cameraGoal);
 }
+
+// RESET -----------------------------------------------------------------------
+// Start the game over: drop whatever the frog is doing and spawn a new one.
+function resetGame() {
+  frogKeys.clear();
+  stopFrogWalk();
+  if (frogIsJumping) {
+    frogIsJumping = false;
+    for (const action of frogJumpActions) action.stop();
+  }
+  if (frogIsStriking) finishFrogTongue();
+  spawnNewFrog();
+  showFrogModel();
+}
+
+const resetButton = document.createElement('button');
+resetButton.type = 'button';
+resetButton.className = 'reset-button';
+resetButton.textContent = 'Reset';
+resetButton.title = 'Start over with a new frog and all fireflies back';
+resetButton.addEventListener('click', (event) => {
+  resetGame();
+  // A mouse click shouldn't leave focus here, or the frog's keys would be ignored.
+  if (event.detail > 0) resetButton.blur();
+});
+document.querySelector('#app').appendChild(resetButton);
 
 // LOOP ------------------------------------------------------------------------
 placeCamera(0, true);
@@ -836,7 +889,8 @@ renderer.setAnimationLoop(() => {
   // Settle smoothly onto the surface below (terrain, lily pad, log or rock),
   // or float at the waterline while swimming.
   const position = frogPlacement.position;
-  const restHeight = frogIsSwimming() ? Math.max(frogGroundHeight - frogSwimSink, frogSwimHeight) : frogGroundHeight;
+  const swimHeight = frogIsStriking ? frogStrikeWaterHeight : frogSwimHeight;
+  const restHeight = frogIsSwimming() ? Math.max(frogGroundHeight - frogSwimSink, swimHeight) : frogGroundHeight;
   position.y += (restHeight - position.y) * (1 - Math.exp(-20 * delta));
   swamp.updatePlants(position, frogRadius, frogSpeed, delta);
   placeCamera(delta);

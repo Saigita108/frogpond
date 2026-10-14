@@ -3,8 +3,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import fireflyUrl from './assets/models/firefly.glb?url'
 
 const fireflyScale = 0.4;
-// The Fly clip loops around the model origin; keep the whole loop inside the spawn radius.
-const flightRadius = 1;
 // Brightest point of each firefly's light pulse (candela). The exported pulse peaks above
 // 10000, which lights up the whole swamp, so it is rescaled to this.
 const fireflyLightPeak = 1.5;
@@ -63,33 +61,30 @@ function pointerTracks(model, channels) {
   return tracks;
 }
 
-// A random spot within radius of center that is inside the world.
-function fireflySpot(swamp, center, radius) {
+// A random spot on the swamp, at most margin from the middle along x and z.
+function fireflySpot(swamp, margin) {
   for (let attempt = 0; attempt < 50; attempt++) {
-    const angle = Math.random() * Math.PI * 2;
-    // sqrt spreads the fireflies evenly over the disc instead of bunching them in the middle.
-    const distance = Math.sqrt(Math.random()) * radius;
-    const x = center.x + Math.sin(angle) * distance;
-    const z = center.z + Math.cos(angle) * distance;
+    const x = (Math.random() * 2 - 1) * margin;
+    const z = (Math.random() * 2 - 1) * margin;
     const surface = swamp.probeSurface(x, z);
     if (!surface) continue;
     // Over a pond the probe finds the pond floor; fly above the water (y = 0) instead.
     return new THREE.Vector3(x, Math.max(surface.height, 0), z);
   }
-  return center.clone();
+  return new THREE.Vector3();
 }
 
-export async function loadFireflies(scene, swamp, center, count, radius) {
+export async function loadFireflies(scene, swamp) {
   const gltf = await new GLTFLoader().loadAsync(fireflyUrl);
   const clipIndex = gltf.parser.json.animations.findIndex((animation) => animation.name === 'Fly');
   const clip = gltf.animations[clipIndex];
   const channels = await readPointerChannels(gltf.parser, clipIndex);
 
   const fireflies = [];
-  for (let index = 0; index < count; index++) {
+  function addFirefly(margin) {
     const model = gltf.scene.clone();
     model.scale.setScalar(fireflyScale);
-    model.position.copy(fireflySpot(swamp, center, radius - flightRadius));
+    model.position.copy(fireflySpot(swamp, margin));
     model.rotation.y = Math.random() * Math.PI * 2;
     scene.add(model);
 
@@ -105,6 +100,12 @@ export async function loadFireflies(scene, swamp, center, count, radius) {
   const bodyPosition = new THREE.Vector3();
   return {
     fireflies,
+    // Replace the swarm with count fireflies at random spots, at most margin from the middle.
+    scatter(count, margin) {
+      for (const firefly of fireflies) firefly.model.removeFromParent();
+      fireflies.length = 0;
+      for (let index = 0; index < count; index++) addFirefly(margin);
+    },
     // World position of a firefly's body; the flight moves it away from the model origin.
     bodyPosition(firefly, target) {
       return firefly.body.getWorldPosition(target);

@@ -234,3 +234,151 @@ canvas {
   opacity: 1;
   transform: translate(-50%, -50%);
 }
+
+.firefly-meter {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.firefly-meter svg {
+  display: block;
+  width: 124px;
+  height: 124px;
+  overflow: visible;
+  filter: drop-shadow(0 6px 16px #050b1a99);
+}
+
+.firefly-meter-pad {
+  fill: url(#firefly-meter-pad);
+  stroke: #5d8a5c;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.firefly-meter-veins line {
+  stroke: #6f9a6a;
+  stroke-width: 0.8;
+  stroke-linecap: round;
+  opacity: 0.35;
+}
+
+.firefly-meter-hollow {
+  fill: #12261b;
+  opacity: 0.55;
+}
+
+.firefly-meter-dot {
+  fill: #13261b;
+  stroke: #4c7a50;
+  stroke-width: 0.8;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 0.4s ease, stroke 0.4s ease;
+}
+
+.firefly-meter-dot.is-lit {
+  fill: #ffe27a;
+  stroke: #ffc94a;
+  filter: url(#firefly-meter-glow);
+}
+
+.firefly-meter-dot.is-new {
+  animation: firefly-meter-flare 0.9s ease-out;
+}
+
+@keyframes firefly-meter-flare {
+  0% { transform: scale(2.6); fill: #fff6c8; }
+  100% { transform: scale(1); }
+}
+
+.firefly-meter-count {
+  fill: #fbefc4;
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-style: italic;
+  text-anchor: middle;
+}
+
+.firefly-meter-total {
+  fill: #a9c79f;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-anchor: middle;
+}
+
+.firefly-meter-label {
+  padding: 4px 12px;
+  border: 1px solid #3f6145;
+  border-radius: 10px;
+  background: #0b1733cc;
+  color: #d6e6c8;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .firefly-meter-dot {
+    transition: none;
+  }
+
+  .firefly-meter-dot.is-new {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .firefly-meter {
+    bottom: 16px;
+    left: 16px;
+  }
+
+  .firefly-meter svg {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+/* Sits just left of the info button in the top right corner. */
+.reset-button {
+  position: fixed;
+  top: 24px;
+  right: 80px;
+  z-index: 10;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid #cad8c4;
+  border-radius: 22px;
+  background: #fcfdf7;
+  box-shadow: 0 4px 14px #23423414;
+  color: #234234;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reset-button:hover {
+  background: #e8efdf;
+}
+
+.reset-button:focus-visible {
+  outline: 2px solid #438d9b;
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .reset-button {
+    top: 16px;
+    right: 70px;
+  }
+}
