@@ -1,6 +1,6 @@
 # Frog Pond
 
-A night-time swamp where you play a frog: hop between lily pads, swim through the ponds and catch all 30 fireflies with your tongue. Built with three.js and the `WebGPURenderer`.
+A night-time swamp where you play a frog racing the sunrise: hop between lily pads, swim through the ponds and catch 10 of the 20 fireflies with your tongue before dawn. Built with three.js and the `WebGPURenderer`.
 
 **Live demo:** https://saigita108.github.io/frogpond/
 
@@ -24,6 +24,7 @@ The original GLSL fragment shader is rewritten in TSL (three.js Shading Language
 | Action | Keys |
 |---|---|
 | Walk forward / backward | `W` / `S` or `↑` / `↓` |
+| Run (or swim fast) | Double-tap `W` / `↑` and hold the second press |
 | Turn | `A` / `D` or `←` / `→` |
 | Jump | `Space` |
 | Flick the tongue to eat a firefly | `F` |
@@ -34,12 +35,18 @@ The original GLSL fragment shader is rewritten in TSL (three.js Shading Language
 
 The **i** button in the top right shows the controls in the game as well.
 
-## Gameplay
+## Gameplay: race the night
 
-- **30 fireflies** fly around the swamp. Press `F` when one is within 1 m in front of the frog: the tongue aims at it, stretches to reach it and pulls it into the mouth. This works on land and in the water.
-- **The lily-pad meter** (bottom left) shows how many fireflies you have eaten.
-- **Progress is saved on your device:** the frog's position, the camera mode and the number of fireflies eaten survive a refresh.
-- **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up, and after 5 seconds a new frog appears at a random spot with an empty meter and all 30 fireflies back.
+**20 fireflies** fly around the swamp. Eat **10** of them before the sun comes up, in **3 minutes**.
+
+- **The clock** (top center) starts with the frog's first move and counts down to sunrise. In the last 30 seconds it glows amber.
+- **Dawn comes slowly:** after about a minute the sky, fog, light and water start warming toward sunrise.
+- **Fireflies stay until eaten:** they only disappear when the frog eats them. A new night (Play again, Reset or a new frog) brings back all 20.
+- **Catching:** press `F` when a firefly is within 1 m in front of the frog. The tongue aims at it, stretches to reach it and pulls it into the mouth. This works on land and in the water.
+- **The lily-pad meter** (bottom left) lights up one dot for each firefly eaten.
+- **Ending the night:** eat 10 for a "Feast complete" card with your time. Your **best time** is saved. If the sun comes up first, you see how many you caught. Both cards have **Play again**.
+- **Progress is saved on your device:** the frog's position, the clock, the fireflies eaten, your best time and the camera mode all survive a refresh.
+- **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up, and after 5 seconds a new frog starts a new night.
 
 ## Extras
 
@@ -55,8 +62,9 @@ Walking, jumping, swimming and eating fireflies, plus ripples in the water shade
 
 ### Multiple shaders
 
-- The ported Shadertoy water shader.
+- The ported Shadertoy water shader, which also lightens at dawn.
 - My own ripple shader, layered on top of it.
+- A sky shader that blends the night panorama into a sunrise gradient as the night runs out.
 
 ### Blender models and animations controlled from code
 

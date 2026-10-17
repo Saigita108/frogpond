@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep, positionWorld } from 'three/tsl'
+import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep, mix, normalize, texture, positionLocal, positionWorld } from 'three/tsl'
 import swampUrl from './assets/models/FrogGame_Swamp/swamp_world.glb?url'
 
 // Solid objects the frog can stand on (see README: ground, lily_pad, rock, log).
@@ -86,6 +86,9 @@ export async function loadSwamp(scene) {
     nextRipple = (nextRipple + 1) % ripples.length;
   }
 
+  // 0 at night, 1 at sunrise: warms the sky dome and lightens the water.
+  const dawn = uniform(0);
+
   const waterRipples = Fn(() => {
     const distortion = vec2(0).toVar();
     const lighting = float(0).toVar();
@@ -117,7 +120,7 @@ export async function loadSwamp(scene) {
     // UV 1 is world meters / 4, so the pattern is seamless across all ponds.
     const waterRepeats = 0.2; // Increase for a smaller water pattern.
     const waterUV = uv(1).mul(waterRepeats).add(ripple.xy);
-    const background = vec3(0.05, 0.2, 0.32);
+    const background = mix(vec3(0.05, 0.2, 0.32), vec3(0.3, 0.36, 0.45), dawn);
     // Only k.xyw is used in the original shader; store it as a vec3.
     const k = vec3(waterUV.mul(7), time.mul(0.8)).toVar();
     const transform = mat3(
@@ -155,11 +158,15 @@ export async function loadSwamp(scene) {
     if (object.material.name === 'Sky_Dome_Unlit') {
       const source = object.material;
       object.material = new THREE.MeshBasicNodeMaterial({
-        map: source.emissiveMap ?? source.map,
         side: THREE.BackSide,
         fog: false,
         depthWrite: false
       });
+      // At dawn the night panorama gives way to a sunrise gradient: warm at the horizon, blue above.
+      const panorama = texture(source.emissiveMap ?? source.map);
+      const height = normalize(positionLocal).y;
+      const sunrise = mix(vec3(1, 0.62, 0.4), vec3(0.45, 0.6, 0.85), smoothstep(0, 0.6, height));
+      object.material.colorNode = mix(panorama.rgb, sunrise, dawn.mul(0.85));
       object.renderOrder = -1;
       object.frustumCulled = false;
     }
@@ -262,6 +269,9 @@ export async function loadSwamp(scene) {
     pondAt,
     addRipple,
     randomSpawn,
+    setDawn(amount) {
+      dawn.value = amount;
+    },
     update(elapsed, camera) {
       rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
       updateFireflies(elapsed);

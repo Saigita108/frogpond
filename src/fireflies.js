@@ -126,6 +126,7 @@ export async function loadFireflies(scene, swamp) {
       lantern,
       lanternPosition: new THREE.Vector3(),
       mixer,
+      // flying -> caught (on the tongue) -> eaten. Fireflies only leave by being eaten.
       state: 'flying'
     });
   }
@@ -158,7 +159,7 @@ export async function loadFireflies(scene, swamp) {
       for (const firefly of fireflies) {
         if (firefly.state === 'flying') firefly.mixer.update(delta);
       }
-      const glowing = fireflies.filter((firefly) => firefly.state !== 'eaten');
+      const glowing = fireflies.filter((firefly) => firefly.model.parent);
       for (const firefly of glowing) firefly.lantern.getWorldPosition(firefly.lanternPosition);
       glowing.sort((a, b) => a.lanternPosition.distanceToSquared(near) - b.lanternPosition.distanceToSquared(near));
       lights.forEach((light, index) => {

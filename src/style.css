@@ -419,3 +419,226 @@ canvas {
     right: 70px;
   }
 }
+
+/* NIGHT CLOCK (top center) ------------------------------------------------- */
+
+.night-clock {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 190px;
+  box-sizing: border-box;
+  padding: 7px 16px 8px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  background: var(--moss);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.night-clock-moon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: var(--cream);
+  filter: drop-shadow(0 0 4px #fbefc480);
+}
+
+.night-clock-body {
+  flex: 1;
+}
+
+.night-clock-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.night-clock-time {
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 20px;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+}
+
+.night-clock-label {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.night-clock-bar {
+  height: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--moss-deep);
+}
+
+/* The bar runs from night blue into sunrise orange. */
+.night-clock-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5a78b8, #e88a6a, var(--glow));
+  clip-path: inset(0 100% 0 0);
+}
+
+.night-clock.is-late {
+  border-color: var(--glow-edge);
+  box-shadow: var(--shadow), 0 0 14px #ffc94a59;
+}
+
+.night-clock.is-late .night-clock-time {
+  color: var(--glow);
+}
+
+@media (max-width: 480px) {
+  .night-clock {
+    top: 68px;
+  }
+}
+
+/* END CARD ------------------------------------------------------------------ */
+
+.end-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  box-sizing: border-box;
+  width: min(340px, calc(100vw - 32px));
+  padding: 28px 26px 24px;
+  border: 1px solid var(--glow-edge);
+  border-radius: 22px;
+  background: var(--moss);
+  box-shadow: 0 16px 48px #050b1acc, 0 0 24px #ffc94a33;
+  color: var(--text);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: end-card-in 0.4s ease-out;
+}
+
+.end-card[hidden] {
+  display: none;
+}
+
+@keyframes end-card-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); }
+}
+
+.end-card h2 {
+  margin: 0 0 10px;
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-style: italic;
+  font-weight: normal;
+}
+
+.end-card-result {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.end-card-best {
+  margin: 0 0 22px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.end-card-best.is-new {
+  color: var(--glow);
+  font-weight: 600;
+  text-shadow: 0 0 10px #ffc94a80;
+}
+
+.end-card-button {
+  padding: 11px 26px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--glow);
+  box-shadow: 0 0 14px #ffc94a80;
+  color: #1c3a29;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.end-card-button:hover {
+  background: #fff0a8;
+}
+
+.end-card-button:focus-visible {
+  outline: 2px solid var(--cream);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .end-card {
+    animation: none;
+  }
+}
+
+/* RADAR (left side) -------------------------------------------------------- */
+
+.radar {
+  position: fixed;
+  top: 50%;
+  left: 24px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.radar canvas {
+  display: block;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+}
+
+.radar-label {
+  padding: 4px 12px;
+  border: 1px solid var(--edge-soft);
+  border-radius: 10px;
+  background: #0b1733cc;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Short or narrow screens: a smaller radar, so it clears the controls and the meter. */
+@media (max-width: 480px), (max-height: 620px) {
+  .radar {
+    left: 16px;
+  }
+
+  .radar canvas {
+    width: 96px;
+    height: 96px;
+  }
+
+  .radar-label {
+    display: none;
+  }
+}
