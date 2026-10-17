@@ -5,6 +5,7 @@ import { loadExplosion } from './explosion.js'
 import { loadFireflies } from './fireflies.js'
 import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
 import { mountRadar } from './radar.js'
+import { createRain } from './rain.js'
 import { loadBestTime, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveNightTime } from './night.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
@@ -50,6 +51,53 @@ window.addEventListener('resize', () => {
 });
 
 const swamp = await loadSwamp(scene);
+
+// Rain over the whole screen, with drops ringing the ponds and lightning now and then.
+// The Rain switch in the bottom right turns it on and off, and the choice is remembered.
+const rainKey = 'frog-pond:rain';
+
+function loadRaining() {
+  try {
+    return localStorage.getItem(rainKey) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+let raining = loadRaining();
+const rain = createRain(scene, swamp, raining);
+
+const rainButton = document.createElement('button');
+rainButton.type = 'button';
+rainButton.className = 'rain-toggle';
+rainButton.innerHTML = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path class="rain-toggle-cloud" d="M7 15a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17 7.5a3.75 3.75 0 0 1 0 7.5Z" />
+    <path class="rain-toggle-drops" d="M8.5 18l-1 2.5M12.5 18l-1 2.5M16.5 18l-1 2.5" />
+  </svg>
+  <span>Rain</span>
+  <span class="rain-toggle-switch" aria-hidden="true"></span>
+`;
+rainButton.title = 'Turn the rain and lightning on or off';
+
+function showRaining() {
+  rainButton.setAttribute('aria-pressed', String(raining));
+}
+
+rainButton.addEventListener('click', (event) => {
+  raining = !raining;
+  rain.setRaining(raining);
+  showRaining();
+  try {
+    localStorage.setItem(rainKey, raining ? 'on' : 'off');
+  } catch {
+    // Storage can be unavailable; the choice just won't be remembered.
+  }
+  // A mouse click shouldn't leave focus here, or the frog's keys would be ignored.
+  if (event.detail > 0) rainButton.blur();
+});
+showRaining();
+document.querySelector('#app').appendChild(rainButton);
 
 // FROG -----------------------------------------------------------------------
 
@@ -450,7 +498,7 @@ function finishFrogJump() {
 const nightLength = 180;
 let nightTime = loadNightTime();
 let nightStarted = nightTime > 0;
-// 'won' or 'sunrise' once the night has ended, otherwise null.
+// 'won', 'sunrise' or 'exploded' once the night has ended, otherwise null.
 let nightResult = null;
 let bestTime = loadBestTime();
 const setNightClock = mountNightClock(document.querySelector('#app'), nightLength);
@@ -469,17 +517,19 @@ function startNight() {
   if (!nightStarted && !nightResult && !frogExploded) nightStarted = true;
 }
 
+// result: 'won', 'sunrise' or 'exploded'.
 // restoring: showing a night that ended before a reload, whose best time was already recorded.
-function endNight(won, restoring = false) {
-  nightResult = won ? 'won' : 'sunrise';
-  saveNightTime(nightTime);
-  const newBest = won && !restoring && (bestTime === null || nightTime < bestTime);
+function endNight(result, restoring = false) {
+  nightResult = result;
+  // An exploded frog's night is already cleared, so a reload starts fresh.
+  if (result !== 'exploded') saveNightTime(nightTime);
+  const newBest = result === 'won' && !restoring && (bestTime === null || nightTime < bestTime);
   if (newBest) {
     bestTime = nightTime;
     saveBestTime(bestTime);
   }
   endCard.show({
-    won,
+    result,
     eaten: firefliesEaten,
     total: fireflyGoal,
     time: nightTime,
@@ -499,7 +549,7 @@ function startNewNight() {
 function updateNight(delta) {
   if (nightStarted && !nightResult && !frogExploded) {
     nightTime = Math.min(nightTime + delta, nightLength);
-    if (nightTime >= nightLength) endNight(false);
+    if (nightTime >= nightLength) endNight('sunrise');
   }
   const progress = nightTime / nightLength;
   // The sky starts to lighten a little over a minute in, and is fully lit at sunrise.
@@ -532,8 +582,8 @@ let fireflies = null;
 let firefliesEaten = loadFirefliesEaten(fireflyGoal);
 const setFireflyMeter = mountFireflyMeter(document.querySelector('#app'), fireflyGoal, firefliesEaten);
 // A night that ended before a reload shows its result again.
-if (firefliesEaten >= fireflyGoal) endNight(true, true);
-else if (nightTime >= nightLength) endNight(false, true);
+if (firefliesEaten >= fireflyGoal) endNight('won', true);
+else if (nightTime >= nightLength) endNight('sunrise', true);
 // The firefly the tongue is flying at, and the one stuck to it on the way back.
 let tongueTarget = null;
 let tongueCatch = null;
@@ -670,7 +720,7 @@ function swallowFirefly() {
   firefliesEaten += 1;
   saveFirefliesEaten(firefliesEaten);
   setFireflyMeter(firefliesEaten);
-  if (firefliesEaten >= fireflyGoal && !nightResult) endNight(true);
+  if (firefliesEaten >= fireflyGoal && !nightResult) endNight('won');
 }
 
 function finishFrogTongue() {
@@ -925,15 +975,19 @@ function explodeFrog() {
   // Hide every frog model; the explosion takes its place.
   frogPlacement.visible = false;
   showScreenMessage(null);
-  // A reload during the countdown should not put the frog back on the edge,
+  // A reload after this should not put the frog back on the edge,
   // and brings a new frog with an empty belly.
   clearFrogSave();
   saveFirefliesEaten(0);
   saveNightTime(0);
+  // Exploding during a running night loses the game: after the blast the end card offers
+  // Play again. Before the night starts (or after it ends) a new frog just comes back.
+  const losesNight = nightStarted && !nightResult;
+  const afterBlast = losesNight ? () => endNight('exploded') : startRespawnCountdown;
   if (explosion) {
-    explosion.play(frogPlacement.position, startRespawnCountdown);
+    explosion.play(frogPlacement.position, afterBlast);
   } else {
-    startRespawnCountdown();
+    afterBlast();
   }
 }
 
@@ -1046,6 +1100,7 @@ renderer.setAnimationLoop(() => {
   position.y += (restHeight - position.y) * (1 - Math.exp(-20 * delta));
   swamp.updatePlants(position, frogRadius, frogSpeed, delta);
   placeCamera(delta);
+  rain.update(camera, delta);
   swamp.update(elapsed, camera);
   renderer.render(scene, camera);
 });

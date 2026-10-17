@@ -63,7 +63,8 @@ export function mountNightClock(app, nightLength) {
       waiting: 'Move to start the night',
       running: 'until sunrise',
       won: 'Feast complete',
-      sunrise: 'The sun is up'
+      sunrise: 'The sun is up',
+      exploded: 'Your frog exploded'
     }[state];
     const key = `${timeLeft}|${text}`;
     if (key === shown) return;
@@ -98,11 +99,18 @@ export function mountEndCard(app, onPlayAgain) {
   button.addEventListener('click', onPlayAgain);
 
   return {
-    show({ won, eaten, total, time, bestTime, newBest }) {
-      title.textContent = won ? 'Feast complete!' : 'The sun is up';
-      result.textContent = won
-        ? `You ate ${total} fireflies in ${formatTime(time)}.`
-        : `You ate ${eaten} of ${total} fireflies before sunrise.`;
+    // outcome: 'won', 'sunrise' or 'exploded'.
+    show({ result: outcome, eaten, total, time, bestTime, newBest }) {
+      title.textContent = {
+        won: 'Feast complete!',
+        sunrise: 'The sun is up',
+        exploded: 'Kaboom! You lost'
+      }[outcome];
+      result.textContent = {
+        won: `You ate ${total} fireflies in ${formatTime(time)}.`,
+        sunrise: `You ate ${eaten} of ${total} fireflies before sunrise.`,
+        exploded: `Your frog hopped off the edge of the swamp and exploded, with ${eaten} of ${total} fireflies eaten.`
+      }[outcome];
       if (newBest) best.textContent = 'New best time!';
       else if (bestTime !== null) best.textContent = `Best time: ${formatTime(bestTime)}`;
       else best.textContent = `Eat ${total} before sunrise to set a best time.`;

@@ -29,6 +29,7 @@ export function mountControlsHelp(app) {
     ['Run', 'Double-tap <kbd>W</kbd> / <kbd>↑</kbd> and hold the second press to run at twice the speed. In the water the frog swims twice as fast.'],
     ['Turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>. The camera swings around with the frog.'],
     ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.'],
+    ['Rain', 'Use the <b>Rain</b> switch in the bottom right to turn the rain and lightning on or off.'],
     ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1 meter in front of the frog.']
   ];
   const guides = {

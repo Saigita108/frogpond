@@ -4,7 +4,9 @@ A night-time swamp where you play a frog racing the sunrise: hop between lily pa
 
 **Live demo:** https://saigita108.github.io/frogpond/
 
-## Shadertoy shader
+## Shadertoy shaders
+
+### 1. Pond water: 2D Top Down Water
 
 The pond water is a port of **2D Top Down Water**:
 https://www.shadertoy.com/view/wt2GRt
@@ -14,10 +16,33 @@ The original GLSL fragment shader is rewritten in TSL (three.js Shading Language
 - It uses the water mesh's second UV set (world meters / 4) instead of `fragCoord / iResolution`, so the pattern runs seamlessly across all six ponds.
 - It is combined with a second shader of my own, `waterRipples`, which adds expanding wave rings that bend the water pattern and light it up.
 
-### How the shader responds to interaction
+How it responds to interaction:
 
 - **Click or tap the water** and a ripple spreads out from that spot.
 - **The frog makes ripples:** a splash when it enters a pond, ripples as it swims, and a ripple when it flicks its tongue in the water.
+
+### 2. Rain: Banished
+
+The rain is ported from **Banished**:
+https://www.shadertoy.com/view/XsX3DB
+
+The original shows a dog in its kennel in a thunderstorm. Only the rain and the lightning are used; the dog and the kennel are left out. See [`src/rain.js`](src/rain.js).
+
+- **Rain:** the lines at the end of `mainImage` that slide a noise texture down the screen, squashed into streaks, and keep only its brightest specks as raindrops.
+- **Lightning:** the flicker from `Render()`, four quick pulses that light up the scene, and the original's trick of making the raindrops glint during a flash.
+
+Changes from the original:
+
+- It is drawn as a full-screen layer on top of the 3D swamp instead of over its own scene.
+- Shadertoy's built-in noise texture (`iChannel3`) is replaced by a 256 × 256 texture of random values made in code.
+- The drops are tinted a cool moonlit blue-white, and there are fewer of them, so the game stays easy to see.
+- The lightning lights up the actual 3D swamp: a cold blue-white light flashes over the whole level, along with a faint wash over the screen. It strikes at a random moment every 8 to 20 seconds instead of exactly every 12. Players whose system asks for less animation get one softer flash instead of the flicker.
+- To make it feel like rain *in* the swamp, a shader of my own (`rainDrops` in [`src/swamp.js`](src/swamp.js)) adds raindrop rings to the ponds.
+
+How it responds to interaction:
+
+- **The rain leans with the wind.** The wind blows from one direction across the swamp, so the streaks slant depending on which way the camera faces. Turning the frog swings the angle around.
+- **The Rain switch** (bottom right) turns the rain on or off. The rain and the rings on the ponds fade in or out together, lightning only strikes while it rains, and the choice is remembered on your device.
 
 ## Controls
 
@@ -31,6 +56,7 @@ The original GLSL fragment shader is rewritten in TSL (three.js Shading Language
 | Zoom | Pinch, or scroll the mouse wheel |
 | Look around the frog | Choose **Look around** (top left), then swipe or drag. `Esc` goes back to **Follow**. |
 | Make ripples | Click the water |
+| Rain on / off | **Rain** switch (bottom right) |
 | Start over | **Reset** (top right) |
 
 The **i** button in the top right shows the controls in the game as well.
@@ -46,7 +72,7 @@ The **i** button in the top right shows the controls in the game as well.
 - **The lily-pad meter** (bottom left) lights up one dot for each firefly eaten.
 - **Ending the night:** eat 10 for a "Feast complete" card with your time. Your **best time** is saved. If the sun comes up first, you see how many you caught. Both cards have **Play again**.
 - **Progress is saved on your device:** the frog's position, the clock, the fireflies eaten, your best time and the camera mode all survive a refresh.
-- **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up, and after 5 seconds a new frog starts a new night.
+- **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up. While the clock is running that loses the night: a "Kaboom! You lost" card offers **Play again**. Before the night starts, a new frog simply appears after 5 seconds.
 
 ## Extras
 
@@ -64,6 +90,8 @@ Walking, jumping, swimming and eating fireflies, plus ripples in the water shade
 
 - The ported Shadertoy water shader, which also lightens at dawn.
 - My own ripple shader, layered on top of it.
+- The ported Shadertoy rain and lightning shader, drawn over the whole screen.
+- My own raindrop shader, which rings the ponds while it rains.
 - A sky shader that blends the night panorama into a sunrise gradient as the night runs out.
 
 ### Blender models and animations controlled from code
