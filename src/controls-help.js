@@ -6,55 +6,32 @@ export function mountControlsHelp(app) {
       aria-expanded="false" aria-controls="controls-panel">i</button>
     <section class="controls-panel" id="controls-panel" aria-label="Swamp controls" hidden>
       <div class="controls-panel-top">
-        <div class="device-toggle" role="group" aria-label="Choose shortcut guide">
-          <button type="button" data-device="trackpad" aria-pressed="true">Trackpad</button>
-          <button type="button" data-device="mouse" aria-pressed="false">Mouse</button>
-        </div>
+        <h2>Explore the swamp</h2>
         <button class="close-button" type="button" aria-label="Close swamp controls">×</button>
       </div>
-      <h2>Explore the swamp</h2>
-      <p class="controls-intro">Eat 10 of the 20 fireflies before the sun comes up. The night starts when you first move, and the camera follows your frog.</p>
+      <p class="controls-intro">Eat 10 of the 20 fireflies before the sun comes up. The night starts when you first move, and the camera follows your frog. <b>Menu</b> (top right) pauses the game and lets you restart or change level.</p>
       <dl class="shortcut-list"></dl>
-      <p class="controls-footer">Press <kbd>Esc</kbd> to close</p>
     </section>
   `;
   app.appendChild(menu);
 
   const infoButton = menu.querySelector('.info-button');
   const panel = menu.querySelector('.controls-panel');
-  const deviceButtons = menu.querySelectorAll('[data-device]');
   const shortcuts = menu.querySelector('.shortcut-list');
-  const frogControls = [
+  // The game is played with a keyboard and a trackpad.
+  const controls = [
     ['Walk', 'Hold <kbd>W</kbd> / <kbd>↑</kbd> to walk forward, <kbd>S</kbd> / <kbd>↓</kbd> to walk backward.'],
     ['Run', 'Double-tap <kbd>W</kbd> / <kbd>↑</kbd> and hold the second press to run at twice the speed. In the water the frog swims twice as fast.'],
     ['Turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>. The camera swings around with the frog.'],
     ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.'],
     ['Rain', 'Use the <b>Rain</b> switch in the bottom right to turn the rain, lightning and their sound on or off.'],
-    ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1 meter in front of the frog.']
+    ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1.5 meters away, anywhere roughly in front of the frog.'],
+    ['Zoom', 'Pinch two fingers together or apart.'],
+    ['Look around', 'Pick <b>Look around</b> at the top left, then swipe with two fingers to swing the camera around the frog. Press <kbd>Esc</kbd> to go back to <b>Follow</b>.'],
   ];
-  const guides = {
-    trackpad: [
-      ...frogControls,
-      ['Zoom', 'Pinch two fingers together or apart.'],
-      ['Look around', 'Pick <b>Look around</b> at the top left, then swipe with two fingers to swing the camera around the frog. Press <kbd>Esc</kbd> to go back to <b>Follow</b>.'],
-      ['Make ripples', 'Click on the water.']
-    ],
-    mouse: [
-      ...frogControls,
-      ['Zoom', 'Scroll the mouse wheel up or down (in <b>Follow</b> mode).'],
-      ['Look around', 'Pick <b>Look around</b> at the top left, then drag with the left button to swing the camera around the frog. Press <kbd>Esc</kbd> to go back to <b>Follow</b>.'],
-      ['Make ripples', 'Left-click on the water.']
-    ]
-  };
-
-  function selectDevice(device) {
-    for (const button of deviceButtons) {
-      button.setAttribute('aria-pressed', String(button.dataset.device === device));
-    }
-    shortcuts.innerHTML = guides[device]
-      .map(([action, gesture]) => `<div><dt>${action}</dt><dd>${gesture}</dd></div>`)
-      .join('');
-  }
+  shortcuts.innerHTML = controls
+    .map(([action, gesture]) => `<div><dt>${action}</dt><dd>${gesture}</dd></div>`)
+    .join('');
 
   function closeMenu(restoreFocus = false) {
     panel.hidden = true;
@@ -69,12 +46,9 @@ export function mountControlsHelp(app) {
     }
     panel.hidden = false;
     infoButton.setAttribute('aria-expanded', 'true');
-    menu.querySelector('[aria-pressed="true"]').focus();
+    menu.querySelector('.close-button').focus();
   });
   menu.querySelector('.close-button').addEventListener('click', () => closeMenu(true));
-  for (const button of deviceButtons) {
-    button.addEventListener('click', () => selectDevice(button.dataset.device));
-  }
   document.addEventListener('pointerdown', (event) => {
     if (!panel.hidden && !menu.contains(event.target)) closeMenu();
   });
@@ -84,6 +58,4 @@ export function mountControlsHelp(app) {
       closeMenu(true);
     }
   });
-
-  selectDevice('trackpad');
 }

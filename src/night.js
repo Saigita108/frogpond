@@ -1,6 +1,7 @@
-// Race the night: the clock until sunrise, the best time, and the end-of-night card.
+// Race the night: the chosen level, the clock until sunrise, best times and the end-of-night card.
+const levelKey = 'frog-pond:level';
 const nightTimeKey = 'frog-pond:night-time';
-const bestTimeKey = 'frog-pond:best-time';
+const bestTimeKey = (level) => `frog-pond:best-time:${level}`;
 
 function loadNumber(key) {
   try {
@@ -23,9 +24,27 @@ function saveNumber(key, value) {
 // Seconds of the current night that have passed (0 when it hasn't started).
 export const loadNightTime = () => loadNumber(nightTimeKey) ?? 0;
 export const saveNightTime = (seconds) => saveNumber(nightTimeKey, seconds);
-// Fastest time to eat every firefly, or null before the first win.
-export const loadBestTime = () => loadNumber(bestTimeKey);
-export const saveBestTime = (seconds) => saveNumber(bestTimeKey, seconds);
+// Fastest winning time on a level, or null before the first win there.
+export const loadBestTime = (level) => loadNumber(bestTimeKey(level));
+export const saveBestTime = (level, seconds) => saveNumber(bestTimeKey(level), seconds);
+
+// The level being played (one of the keys of levels), or null before the first game.
+export function loadLevel(levels) {
+  try {
+    const saved = localStorage.getItem(levelKey);
+    return saved !== null && Object.hasOwn(levels, saved) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLevel(level) {
+  try {
+    localStorage.setItem(levelKey, level);
+  } catch {
+    // Storage can be unavailable; the level just won't be remembered.
+  }
+}
 
 export function formatTime(seconds) {
   const whole = Math.max(0, Math.ceil(seconds));
@@ -33,7 +52,7 @@ export function formatTime(seconds) {
 }
 
 // The pill at the top: time left until sunrise and a bar that fills as the night passes.
-export function mountNightClock(app, nightLength) {
+export function mountNightClock(app) {
   const clock = document.createElement('div');
   clock.className = 'night-clock';
   clock.setAttribute('role', 'timer');
@@ -57,28 +76,33 @@ export function mountNightClock(app, nightLength) {
   const bar = clock.querySelector('.night-clock-bar span');
   let shown = null;
 
-  return function setClock(nightTime, state) {
-    const timeLeft = formatTime(nightLength - nightTime);
+  // state: 'demo', 'waiting', 'running', 'won', 'sunrise' or 'exploded'.
+  return function setClock(nightTime, state, nightLength) {
+    const demo = state === 'demo';
+    const timeLeft = demo ? 'Demo' : formatTime(nightLength - nightTime);
     const text = {
+      demo: 'free play, no clock',
       waiting: 'Move to start the night',
       running: 'until sunrise',
-      won: 'Feast complete',
-      sunrise: 'The sun is up',
-      exploded: 'Your frog exploded'
+      won: 'You won',
+      sunrise: 'You lost: sunrise',
+      exploded: 'You lost'
     }[state];
     const key = `${timeLeft}|${text}`;
     if (key === shown) return;
     shown = key;
     timeText.textContent = timeLeft;
     label.textContent = text;
-    bar.style.clipPath = `inset(0 ${100 - Math.min(nightTime / nightLength, 1) * 100}% 0 0)`;
-    // The last 30 seconds glow as a warning.
-    clock.classList.toggle('is-late', state === 'running' && nightLength - nightTime <= 30);
+    const progress = demo ? 0 : Math.min(nightTime / nightLength, 1);
+    bar.style.clipPath = `inset(0 ${100 - progress * 100}% 0 0)`;
+    // The last 30 seconds (15 on the one-minute level) glow as a warning.
+    const lateFrom = Math.min(30, nightLength / 4);
+    clock.classList.toggle('is-late', state === 'running' && nightLength - nightTime <= lateFrom);
   };
 }
 
-// The card that ends a night, with a Play again button.
-export function mountEndCard(app, onPlayAgain) {
+// The card that ends a night, with Play again and Menu buttons.
+export function mountEndCard(app, onPlayAgain, onMenu) {
   const card = document.createElement('section');
   card.className = 'end-card';
   card.setAttribute('role', 'dialog');
@@ -88,22 +112,26 @@ export function mountEndCard(app, onPlayAgain) {
     <h2 id="end-card-title"></h2>
     <p class="end-card-result"></p>
     <p class="end-card-best"></p>
-    <button type="button" class="end-card-button">Play again</button>
+    <div class="end-card-actions">
+      <button type="button" class="end-card-button">Play again</button>
+      <button type="button" class="end-card-menu">Menu</button>
+    </div>
   `;
   app.appendChild(card);
 
   const title = card.querySelector('h2');
   const result = card.querySelector('.end-card-result');
   const best = card.querySelector('.end-card-best');
-  const button = card.querySelector('button');
+  const button = card.querySelector('.end-card-button');
   button.addEventListener('click', onPlayAgain);
+  card.querySelector('.end-card-menu').addEventListener('click', onMenu);
 
   return {
     // outcome: 'won', 'sunrise' or 'exploded'.
     show({ result: outcome, eaten, total, time, bestTime, newBest }) {
       title.textContent = {
-        won: 'Feast complete!',
-        sunrise: 'The sun is up',
+        won: 'You won! Feast complete',
+        sunrise: 'You lost: the sun is up',
         exploded: 'Kaboom! You lost'
       }[outcome];
       result.textContent = {

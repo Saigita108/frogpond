@@ -6,7 +6,11 @@ import { loadFireflies } from './fireflies.js'
 import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
 import { mountRadar } from './radar.js'
 import { createRain } from './rain.js'
-import { loadBestTime, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveNightTime } from './night.js'
+import {
+  loadBestTime, loadLevel, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveLevel, saveNightTime
+} from './night.js'
+import { mountStartScreen } from './start-screen.js'
+import { mountTutorial } from './tutorial.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -418,13 +422,38 @@ function stopFrogWalk() {
   for (const action of frogWalkActions) action.stop();
 }
 
+// What the frog has done so far, for the demo's tutorial (see tutorial.js).
+const practice = {
+  forward: 0,
+  backward: 0,
+  swum: 0,
+  turned: 0,
+  running: 0,
+  jumps: 0,
+  eaten: 0,
+  nearestFirefly: Infinity,
+  cameraMode: 'follow'
+};
+
+function recordMove(direction, run, moved, delta, swimming) {
+  if (direction > 0) practice.forward += moved;
+  if (direction < 0) practice.backward += moved;
+  if (run > 1 && moved > 0) practice.running += delta;
+  if (swimming) practice.swum += moved;
+}
+
 function updateFrogMovement(delta) {
-  // The frog holds still while its tongue is out.
+  // The frog holds still while its tongue is out, and for good once the night is won or lost.
   if (!idleFrog || frogExploded || frogIsStriking) return 0;
+  if (nightResult || menuOpen) {
+    if (frogWalkDirection) stopFrogWalk();
+    return 0;
+  }
   const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
   frogPlacement.rotation.y += turn * frogTurnSpeed * delta;
+  practice.turned += Math.abs(turn) * frogTurnSpeed * delta;
   // Ponds slow the frog down (move/jump multipliers from the water's game properties).
   const speedMultiplier = frogPond?.props.move_speed_multiplier ?? 1;
   const jumpMultiplier = frogPond?.props.jump_strength_multiplier ?? 1;
@@ -447,7 +476,9 @@ function updateFrogMovement(delta) {
       action.setEffectiveTimeScale(direction ? direction * frogSwimTimeScale * run : frogFloatTimeScale);
     }
     frogSwimMixer.update(delta);
-    return moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+    const swam = moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+    recordMove(direction, run, swam, delta, true);
+    return swam;
   }
   if (!direction || !walkFrog || frogWalkActions.length === 0) {
     if (frogWalkDirection) stopFrogWalk();
@@ -469,12 +500,15 @@ function updateFrogMovement(delta) {
     action.setEffectiveTimeScale(direction * frogWalkTimeScale * speedMultiplier * run);
   }
   frogWalkMixer.update(delta);
-  return moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+  const walked = moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+  recordMove(direction, run, walked, delta, false);
+  return walked;
 }
 
 function startFrogJump() {
-  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded) return;
+  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded || nightResult) return;
   frogIsJumping = true;
+  practice.jumps += 1;
   stopFrogWalk();
   showFrogModel();
   unfinishedJumpActions.clear();
@@ -492,20 +526,30 @@ function finishFrogJump() {
   showFrogModel();
 }
 
-// NIGHT -----------------------------------------------------------------------
-// Race the night: eat every firefly before sunrise. The clock starts with the frog's first
-// move, survives a reload, and a new frog starts a new night.
-const nightLength = 180;
-let nightTime = loadNightTime();
+// LEVELS AND NIGHT --------------------------------------------------------------
+// Race the night: eat enough fireflies before sunrise. Each level gives a different amount of
+// night; the demo has no clock at all. The clock starts with the frog's first move, survives a
+// reload, pauses while the menu is open, and a new frog starts a new night.
+const levels = {
+  demo: { name: 'Demo', nightLength: null, detail: 'Free play, no clock' },
+  easy: { name: 'Easy', nightLength: 180, detail: 'Three minutes until sunrise' },
+  medium: { name: 'Medium', nightLength: 120, detail: 'Two minutes until sunrise' },
+  hard: { name: 'Hard', nightLength: 60, detail: 'One minute until sunrise' }
+};
+// null until the first level is chosen on the start screen.
+let level = loadLevel(levels);
+const isDemo = () => level === 'demo';
+const nightLength = () => levels[level ?? 'easy'].nightLength ?? Infinity;
+
+let nightTime = isDemo() ? 0 : loadNightTime();
 let nightStarted = nightTime > 0;
 // 'won', 'sunrise' or 'exploded' once the night has ended, otherwise null.
 let nightResult = null;
-let bestTime = loadBestTime();
-const setNightClock = mountNightClock(document.querySelector('#app'), nightLength);
+const setNightClock = mountNightClock(document.querySelector('#app'));
 const endCard = mountEndCard(document.querySelector('#app'), (event) => {
   resetGame();
   if (event.detail > 0) event.currentTarget.blur();
-});
+}, () => openMenu());
 
 // Dawn colors for the fog and the ambient light; the sky dome and water change in swamp.js.
 const nightSky = new THREE.Color(nightColor);
@@ -514,19 +558,23 @@ const nightAmbient = new THREE.Color(0x9fb4e0);
 const dawnAmbient = new THREE.Color(0xffd2b0);
 
 function startNight() {
-  if (!nightStarted && !nightResult && !frogExploded) nightStarted = true;
+  if (!nightStarted && !nightResult && !frogExploded && !menuOpen && !isDemo()) nightStarted = true;
 }
 
 // result: 'won', 'sunrise' or 'exploded'.
-// restoring: showing a night that ended before a reload, whose best time was already recorded.
-function endNight(result, restoring = false) {
+function endNight(result) {
   nightResult = result;
+  // The game is over: the frog stops where it is until Play again or Reset.
+  frogKeys.clear();
+  frogRunning = false;
+  stopFrogWalk();
   // An exploded frog's night is already cleared, so a reload starts fresh.
   if (result !== 'exploded') saveNightTime(nightTime);
-  const newBest = result === 'won' && !restoring && (bestTime === null || nightTime < bestTime);
+  let bestTime = loadBestTime(level);
+  const newBest = result === 'won' && (bestTime === null || nightTime < bestTime);
   if (newBest) {
     bestTime = nightTime;
-    saveBestTime(bestTime);
+    saveBestTime(level, bestTime);
   }
   endCard.show({
     result,
@@ -547,20 +595,65 @@ function startNewNight() {
 }
 
 function updateNight(delta) {
-  if (nightStarted && !nightResult && !frogExploded) {
-    nightTime = Math.min(nightTime + delta, nightLength);
-    if (nightTime >= nightLength) endNight('sunrise');
+  const length = nightLength();
+  if (nightStarted && !nightResult && !frogExploded && !menuOpen && !isDemo()) {
+    nightTime = Math.min(nightTime + delta, length);
+    if (nightTime >= length) endNight('sunrise');
   }
-  const progress = nightTime / nightLength;
-  // The sky starts to lighten a little over a minute in, and is fully lit at sunrise.
+  // The demo stays night. Otherwise the sky starts to lighten 40% of the way through the
+  // night, and is fully lit at sunrise.
+  const progress = isDemo() ? 0 : nightTime / length;
   const dawn = THREE.MathUtils.smoothstep(progress, 0.4, 1);
   scene.background.lerpColors(nightSky, dawnSky, dawn);
   scene.fog.color.copy(scene.background);
   hemisphereLight.color.lerpColors(nightAmbient, dawnAmbient, dawn);
   hemisphereLight.intensity = THREE.MathUtils.lerp(1.4, 2.4, dawn);
   swamp.setDawn(dawn);
-  const state = nightResult ?? (nightStarted ? 'running' : 'waiting');
-  setNightClock(nightTime, state);
+  const state = isDemo() ? 'demo' : nightResult ?? (nightStarted ? 'running' : 'waiting');
+  setNightClock(nightTime, state, length);
+}
+
+// START SCREEN AND MENU -------------------------------------------------------
+// The start screen opens with the game and doubles as the pause menu (the Menu button).
+let menuOpen = false;
+const startScreen = mountStartScreen(document.querySelector('#app'), levels, {
+  onPlay: (chosen) => startLevel(chosen),
+  onContinue: () => closeMenu()
+});
+
+// A finished night can't be continued, and neither can the demo once its tutorial is over.
+function canContinueNight() {
+  if (level === null || nightResult) return false;
+  return !isDemo() || tutorial.isActive();
+}
+
+function openMenu(canContinue = canContinueNight()) {
+  menuOpen = true;
+  frogKeys.clear();
+  frogRunning = false;
+  stopFrogWalk();
+  document.body.classList.add('menu-open');
+  const bests = Object.fromEntries(Object.keys(levels).map((key) => [key, loadBestTime(key)]));
+  startScreen.show({ current: canContinue ? level : null, bests });
+}
+
+function closeMenu() {
+  menuOpen = false;
+  document.body.classList.remove('menu-open');
+  startScreen.hide();
+}
+
+// The demo's tutorial: a coach card that teaches the controls and the goal step by step.
+const tutorial = mountTutorial(document.querySelector('#app'), { onChooseLevel: () => openMenu() });
+
+// A new frog, a full swarm and a fresh night on the chosen level.
+function startLevel(chosen) {
+  level = chosen;
+  saveLevel(level);
+  closeMenu();
+  resetGame();
+  if (isDemo()) tutorial.start();
+  else tutorial.stop();
 }
 
 window.addEventListener('pagehide', () => {
@@ -574,16 +667,17 @@ const fireflyCount = 20;
 const fireflyGoal = 10;
 // Keep them clear of the edge warning zone, so none is lost to the explosion.
 const fireflyMargin = 26;
-// A firefly can be eaten when it is this close to the mouth and roughly in front of the frog.
-const tongueRange = 1;
-const tongueAimAngle = THREE.MathUtils.degToRad(35);
+// A firefly can be eaten when it is this close to the mouth (meters) and within this angle
+// to either side of where the frog faces.
+const tongueRange = 1.5;
+const tongueAimAngle = THREE.MathUtils.degToRad(60);
 let fireflies = null;
 // Eaten fireflies stay eaten across reloads; a new frog after an explosion starts over at 0.
 let firefliesEaten = loadFirefliesEaten(fireflyGoal);
 const setFireflyMeter = mountFireflyMeter(document.querySelector('#app'), fireflyGoal, firefliesEaten);
-// A night that ended before a reload shows its result again.
-if (firefliesEaten >= fireflyGoal) endNight('won', true);
-else if (nightTime >= nightLength) endNight('sunrise', true);
+// A night that was still going when the page closed can be continued from the start screen;
+// a finished one can't (the player picks a level and starts fresh).
+const savedNightFinished = !isDemo() && (firefliesEaten >= fireflyGoal || nightTime >= nightLength());
 // The firefly the tongue is flying at, and the one stuck to it on the way back.
 let tongueTarget = null;
 let tongueCatch = null;
@@ -606,10 +700,15 @@ function refreshRadar() {
   radarFrog.z = frogPlacement.position.z;
   radarFrog.heading = frogPlacement.rotation.y;
   radarFireflies.length = 0;
+  practice.nearestFirefly = Infinity;
   for (const firefly of fireflies?.fireflies ?? []) {
     if (firefly.state !== 'flying') continue;
     fireflies.bodyPosition(firefly, fireflyPosition);
     radarFireflies.push({ x: fireflyPosition.x, z: fireflyPosition.z, alpha: 1 });
+    practice.nearestFirefly = Math.min(practice.nearestFirefly, Math.hypot(
+      fireflyPosition.x - radarFrog.x,
+      fireflyPosition.z - radarFrog.z
+    ));
   }
   updateRadar(radarFrog, radarFireflies);
 }
@@ -696,8 +795,9 @@ function updateFrogTongue(delta) {
     aimTongue();
     if (time >= tongueHitTime) {
       tongueHasHit = true;
-      // It may have fluttered out of reach while the tongue was on its way.
-      if (tongueTarget && tongueDistanceTo(tongueTarget) !== null) tongueCatch = tongueTarget;
+      // The tongue follows its firefly, so once aimed it always catches it, even if the
+      // firefly fluttered a little out of reach on the way.
+      if (tongueTarget?.state === 'flying') tongueCatch = tongueTarget;
       tongueTarget = null;
     }
   } else {
@@ -717,10 +817,20 @@ function updateFrogTongue(delta) {
 function swallowFirefly() {
   fireflies.swallow(tongueCatch);
   tongueCatch = null;
+  practice.eaten += 1;
+  // The demo has no winning: after a full meter it starts counting again.
+  if (isDemo() && firefliesEaten >= fireflyGoal) firefliesEaten = 0;
   firefliesEaten += 1;
   saveFirefliesEaten(firefliesEaten);
   setFireflyMeter(firefliesEaten);
-  if (firefliesEaten >= fireflyGoal && !nightResult) endNight('won');
+  if (isDemo()) {
+    // ...and the swarm comes back once every firefly has been eaten.
+    if (!fireflies.fireflies.some((firefly) => firefly.state === 'flying')) {
+      fireflies.scatter(fireflyCount, fireflyMargin);
+    }
+  } else if (firefliesEaten >= fireflyGoal && !nightResult) {
+    endNight('won');
+  }
 }
 
 function finishFrogTongue() {
@@ -738,6 +848,8 @@ window.addEventListener('keydown', (event) => {
     'input, textarea, select, button, a[href], [role="button"]'
   )) return;
   event.preventDefault();
+  // The start screen / menu pauses the frog.
+  if (menuOpen) return;
   startNight();
   if (event.code === 'Space') {
     if (!event.repeat) startFrogJump();
@@ -806,12 +918,16 @@ function placeCamera(delta, snap = false) {
   const position = frogPlacement.position;
   const follow = (rate) => (snap ? 1 : 1 - Math.exp(-rate * delta));
 
-  if (cameraMode === 'look') {
+  // The start screen slowly circles the frog; Look around orbits it by hand.
+  if (cameraMode === 'look' || menuOpen) {
     const pivotY = position.y + 0.3;
-    const across = Math.cos(cameraPitch) * cameraDistance;
+    // The start screen shows a wider view of the swamp from a little higher up.
+    const distance = menuOpen ? Math.max(cameraDistance, 4.5) : cameraDistance;
+    const pitch = menuOpen ? 0.45 : cameraPitch;
+    const across = Math.cos(pitch) * distance;
     cameraGoal.set(
       position.x - Math.sin(cameraYaw) * across,
-      pivotY + Math.sin(cameraPitch) * cameraDistance,
+      pivotY + Math.sin(pitch) * distance,
       position.z - Math.cos(cameraYaw) * across
     );
     lookGoal.set(position.x, pivotY, position.z);
@@ -1028,7 +1144,7 @@ function spawnNewFrog() {
 }
 
 // RESET -----------------------------------------------------------------------
-// Start the game over: drop whatever the frog is doing and spawn a new one.
+// Start the night over: drop whatever the frog is doing and spawn a new one.
 function resetGame() {
   frogKeys.clear();
   stopFrogWalk();
@@ -1041,19 +1157,18 @@ function resetGame() {
   showFrogModel();
 }
 
-const resetButton = document.createElement('button');
-resetButton.type = 'button';
-resetButton.className = 'reset-button';
-resetButton.textContent = 'Reset';
-resetButton.title = 'Start a new night with a new frog and all fireflies back';
-resetButton.addEventListener('click', (event) => {
-  resetGame();
-  // A mouse click shouldn't leave focus here, or the frog's keys would be ignored.
-  if (event.detail > 0) resetButton.blur();
-});
-document.querySelector('#app').appendChild(resetButton);
+// The Menu button pauses the game and opens the start screen: Continue, Restart or another level.
+const menuButton = document.createElement('button');
+menuButton.type = 'button';
+menuButton.className = 'menu-button';
+menuButton.textContent = 'Menu';
+menuButton.title = 'Pause, restart or choose another level';
+menuButton.addEventListener('click', () => openMenu());
+document.querySelector('#app').appendChild(menuButton);
 
 // LOOP ------------------------------------------------------------------------
+// After a reload, a real level's night can be continued, but the demo always starts over.
+openMenu(level !== null && !savedNightFinished && !isDemo());
 placeCamera(0, true);
 camera.position.copy(cameraGoal);
 
@@ -1072,6 +1187,9 @@ renderer.setAnimationLoop(() => {
   fireflies?.update(delta, frogPlacement.position);
   updateNight(delta);
   refreshRadar();
+  if (menuOpen) cameraYaw += delta * 0.15;
+  practice.cameraMode = cameraMode;
+  if (isDemo() && !menuOpen) tutorial.update(practice);
   frogSpeed = delta > 0 ? moved / delta : 0;
 
   updateFrogWater(elapsed, moved > 0);
