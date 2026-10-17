@@ -1,5 +1,6 @@
 import './style.css'
 import { mountControlsHelp } from './controls-help.js'
+import { applyUiScale } from './ui-scale.js'
 import { loadCameraMode, mountCameraToggle } from './camera-toggle.js'
 import { loadExplosion } from './explosion.js'
 import { loadFireflies } from './fireflies.js'
@@ -21,6 +22,7 @@ import frogWalkModelUrl from './assets/models/frog-walk.glb?url'
 import frogSwimModelUrl from './assets/models/frog-swim.glb?url'
 import frogTongueModelUrl from './assets/models/frog-tongue.glb?url'
 
+applyUiScale();
 mountControlsHelp(document.querySelector('#app'));
 
 const nightColor = 0x0b1733;

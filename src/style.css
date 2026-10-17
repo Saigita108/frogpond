@@ -29,6 +29,25 @@ canvas {
   display: block;
 }
 
+/* INTERFACE SCALE ----------------------------------------------------------- */
+/* On screens bigger than 1440 × 900 every piece of the interface grows with the screen
+   (--ui-scale is set by ui-scale.js, from 1 up to 1.8). zoom scales each piece, including its
+   distance from the screen edge; sizes based on the viewport divide by the scale to match. */
+.controls-help,
+.camera-toggle,
+.night-clock,
+.menu-button,
+.radar,
+.firefly-meter,
+.rain-toggle,
+.screen-message,
+.shock-status,
+.end-card,
+.coach,
+.start-panel {
+  zoom: var(--ui-scale, 1);
+}
+
 /* CONTROLS HELP ------------------------------------------------------------ */
 
 .controls-help {
@@ -73,8 +92,8 @@ canvas {
 .controls-panel {
   box-sizing: border-box;
   scrollbar-color: var(--edge) transparent;
-  width: min(350px, calc(100vw - 32px));
-  max-height: calc(100dvh - 100px);
+  width: min(350px, calc(100vw / var(--ui-scale, 1) - 32px));
+  max-height: calc(100dvh / var(--ui-scale, 1) - 100px);
   overflow-y: auto;
   margin-top: 12px;
   padding: 22px;
@@ -229,7 +248,7 @@ canvas {
   top: 50%;
   left: 50%;
   z-index: 5;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw / var(--ui-scale, 1) - 32px);
   box-sizing: border-box;
   padding: 14px 24px;
   border: 1px solid var(--glow-edge);
@@ -495,7 +514,7 @@ canvas {
   left: 50%;
   z-index: 20;
   box-sizing: border-box;
-  width: min(340px, calc(100vw - 32px));
+  width: min(340px, calc(100vw / var(--ui-scale, 1) - 32px));
   padding: 28px 26px 24px;
   border: 1px solid var(--glow-edge);
   border-radius: 22px;
@@ -786,7 +805,7 @@ body.menu-open .screen-message {
 
 .start-panel {
   box-sizing: border-box;
-  width: min(620px, 100%);
+  width: min(620px, calc(100vw / var(--ui-scale, 1) - 32px));
   margin: auto;
   padding: 30px 28px 24px;
   border: 1px solid var(--edge);
@@ -1039,7 +1058,7 @@ body.menu-open .screen-message {
   left: 50%;
   z-index: 6;
   box-sizing: border-box;
-  width: min(440px, calc(100vw - 340px));
+  width: min(440px, calc(100vw / var(--ui-scale, 1) - 340px));
   padding: 14px 18px 16px;
   border: 1px solid var(--edge);
   border-radius: 20px;

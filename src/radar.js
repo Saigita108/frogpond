@@ -1,3 +1,5 @@
+import { uiScale } from './ui-scale.js'
+
 // A round radar with the frog in the middle, facing up: fireflies within range show as yellow dots.
 const size = 140;
 const ringStep = 5; // meters between the faint distance rings
@@ -18,7 +20,8 @@ export function mountRadar(app, range) {
   let lastLabel = '';
 
   function resize() {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    // Draw at the screen's real resolution, including the interface scale, so it stays sharp.
+    const ratio = Math.min(window.devicePixelRatio || 1, 2) * uiScale();
     canvas.width = size * ratio;
     canvas.height = size * ratio;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
