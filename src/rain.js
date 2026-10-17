@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { Fn, vec2, vec3, vec4, uniform, uv, texture, time, pow, positionGeometry } from 'three/tsl'
+import { createRainSound } from './rain-sound.js'
 
 // Banished
 // Shadertoy source: https://www.shadertoy.com/view/XsX3DB
@@ -105,6 +106,8 @@ export function createRain(scene, swamp, startRaining = true) {
   let strikeTime = null;
 
   let raining = startRaining;
+  // The rain's hiss and the thunder, from the same Shadertoy (see rain-sound.js).
+  const sound = createRainSound();
   const forward = new THREE.Vector3();
 
   return {
@@ -116,11 +119,15 @@ export function createRain(scene, swamp, startRaining = true) {
       amount.value = THREE.MathUtils.clamp(amount.value + (raining ? step : -step), 0, 1);
       overlay.visible = amount.value > 0;
       swamp.setRain(amount.value);
+      sound.setLevel(amount.value);
 
       // Lightning only strikes while it rains.
       if (strikeTime === null) {
         nextStrikeIn -= delta;
-        if (nextStrikeIn <= 0 && amount.value > 0.5) strikeTime = 0;
+        if (nextStrikeIn <= 0 && amount.value > 0.5) {
+          strikeTime = 0;
+          sound.thunder();
+        }
       } else {
         strikeTime += delta;
         if (strikeTime > strikeLength) {

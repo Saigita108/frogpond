@@ -78,7 +78,7 @@ rainButton.innerHTML = `
   <span>Rain</span>
   <span class="rain-toggle-switch" aria-hidden="true"></span>
 `;
-rainButton.title = 'Turn the rain and lightning on or off';
+rainButton.title = 'Turn the rain, lightning and their sound on or off';
 
 function showRaining() {
   rainButton.setAttribute('aria-pressed', String(raining));

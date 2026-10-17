@@ -30,6 +30,7 @@ The original shows a dog in its kennel in a thunderstorm. Only the rain and the 
 
 - **Rain:** the lines at the end of `mainImage` that slide a noise texture down the screen, squashed into streaks, and keep only its brightest specks as raindrops.
 - **Lightning:** the flicker from `Render()`, four quick pulses that light up the scene, and the original's trick of making the raindrops glint during a flash.
+- **Sound** (the shader's "Sound" tab, `mainSound`): the hiss of the rain and the rumble of thunder. Shadertoy computes sound on the GPU, one sample at a time; here the same maths runs in JavaScript once, into Web Audio buffers. See [`src/rain-sound.js`](src/rain-sound.js). The rain loops, and the thunder plays about 0.35 s after each lightning flash, like in the original. The dog's sniffing is left out.
 
 Changes from the original:
 
@@ -42,7 +43,8 @@ Changes from the original:
 How it responds to interaction:
 
 - **The rain leans with the wind.** The wind blows from one direction across the swamp, so the streaks slant depending on which way the camera faces. Turning the frog swings the angle around.
-- **The Rain switch** (bottom right) turns the rain on or off. The rain and the rings on the ponds fade in or out together, lightning only strikes while it rains, and the choice is remembered on your device.
+- **The Rain switch** (bottom right) turns the rain on or off. The rain, its sound and the rings on the ponds fade in or out together, lightning and thunder only come while it rains, and the choice is remembered on your device.
+- **Sound starts with your first click or key press,** because browsers don't allow sound before the player interacts with the page.
 
 ## Controls
 
