@@ -194,7 +194,7 @@ canvas {
 
 .controls-help button:focus-visible,
 .camera-toggle button:focus-visible,
-.reset-button:focus-visible {
+.menu-button:focus-visible {
   outline: 2px solid var(--glow);
   outline-offset: 3px;
 }
@@ -389,9 +389,9 @@ canvas {
   }
 }
 
-/* RESET BUTTON (just left of the info button) ----------------------------- */
+/* MENU BUTTON (just left of the info button) ------------------------------ */
 
-.reset-button {
+.menu-button {
   position: fixed;
   top: 24px;
   right: 80px;
@@ -409,12 +409,12 @@ canvas {
   font-weight: 600;
 }
 
-.reset-button:hover {
+.menu-button:hover {
   background: var(--moss-hover);
 }
 
 @media (max-width: 480px) {
-  .reset-button {
+  .menu-button {
     top: 16px;
     right: 70px;
   }
@@ -586,6 +586,33 @@ canvas {
   outline-offset: 3px;
 }
 
+.end-card-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.end-card-menu {
+  padding: 11px 22px;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.end-card-menu:hover {
+  background: var(--moss-hover);
+}
+
+.end-card-menu:focus-visible {
+  outline: 2px solid var(--glow);
+  outline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .end-card {
     animation: none;
@@ -741,5 +768,283 @@ canvas {
   .rain-toggle {
     right: 16px;
     bottom: 16px;
+  }
+}
+
+/* START SCREEN (also the pause menu) ---------------------------------------- */
+
+/* While it is open, the game's own controls step aside; the rain switch and the i button stay. */
+body.menu-open .night-clock,
+body.menu-open .radar,
+body.menu-open .firefly-meter,
+body.menu-open .camera-toggle,
+body.menu-open .menu-button,
+body.menu-open .end-card,
+body.menu-open .screen-message {
+  display: none;
+}
+
+.start-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 24px 16px;
+  overflow-y: auto;
+  /* Darken the swamp toward the edges, so the panel stands out but the scene still shows. */
+  background: radial-gradient(ellipse at center, #0b173333 0%, #0b1733b3 75%, #0b1733e6 100%);
+}
+
+.start-screen[hidden] {
+  display: none;
+}
+
+.start-panel {
+  box-sizing: border-box;
+  width: min(620px, 100%);
+  margin: auto;
+  padding: 30px 28px 24px;
+  border: 1px solid var(--edge);
+  border-radius: 26px;
+  background: linear-gradient(160deg, #24452fe6, #12271ce6);
+  box-shadow: 0 20px 60px #050b1acc;
+  color: var(--text);
+  text-align: center;
+  animation: start-in 0.5s ease-out;
+}
+
+@keyframes start-in {
+  from { opacity: 0; transform: translateY(12px); }
+}
+
+.start-kicker {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.start-title {
+  margin: 6px 0 8px;
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: clamp(40px, 9vw, 60px);
+  font-style: italic;
+  font-weight: normal;
+  line-height: 1;
+  text-shadow: 0 0 24px #ffc94a59;
+}
+
+.start-tagline {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.start-resume {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.start-resume[hidden] {
+  display: none;
+}
+
+.start-continue {
+  padding: 11px 28px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--glow);
+  box-shadow: 0 0 14px #ffc94a80;
+  color: #1c3a29;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.start-continue:hover {
+  background: #fff0a8;
+}
+
+.start-restart {
+  padding: 11px 22px;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.start-restart:hover {
+  background: var(--moss-hover);
+}
+
+.start-choose {
+  margin: 0 0 12px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.start-levels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.start-level {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 118px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--edge-soft);
+  border-radius: 16px;
+  background: var(--moss-deep);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.start-level:hover {
+  border-color: var(--glow-edge);
+  box-shadow: 0 0 14px #ffc94a40;
+  transform: translateY(-2px);
+}
+
+.start-level.is-current {
+  border-color: var(--edge);
+}
+
+/* The demo is a small button centered above the three real levels, with just its name. */
+.start-level[data-level="demo"] {
+  grid-column: 1 / -1;
+  justify-self: center;
+  min-height: 0;
+  padding: 8px 22px;
+  border-style: dashed;
+  border-radius: 18px;
+  background: transparent;
+}
+
+.start-level[data-level="demo"] .start-level-time,
+.start-level[data-level="demo"] .start-level-detail,
+.start-level[data-level="demo"] .start-level-best {
+  display: none;
+}
+
+.start-level-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+}
+
+.start-level-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* One glowing firefly per step of difficulty. */
+.start-level-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.start-level-pips i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--glow);
+  box-shadow: 0 0 6px #ffc94a;
+}
+
+.start-level-time {
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 26px;
+  font-style: italic;
+  line-height: 1.1;
+}
+
+.start-level-detail {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.start-level-best {
+  margin-top: auto;
+  color: var(--glow);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.start-hint {
+  margin: 18px 0 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.start-hint kbd {
+  margin: 0 1px;
+  padding: 1px 5px;
+  border: 1px solid var(--edge-soft);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--moss-deep);
+  color: var(--cream);
+  font-size: 11px;
+}
+
+.start-hint b {
+  color: var(--text);
+}
+
+.start-screen button:focus-visible {
+  outline: 2px solid var(--glow);
+  outline-offset: 3px;
+}
+
+@media (max-width: 420px) {
+  .start-levels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .start-panel {
+    padding: 24px 18px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .start-panel {
+    animation: none;
+  }
+
+  .start-level {
+    transition: none;
+  }
+
+  .start-level:hover {
+    transform: none;
   }
 }

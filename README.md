@@ -59,20 +59,35 @@ How it responds to interaction:
 | Look around the frog | Choose **Look around** (top left), then swipe or drag. `Esc` goes back to **Follow**. |
 | Make ripples | Click the water |
 | Rain on / off | **Rain** switch (bottom right) |
-| Start over | **Reset** (top right) |
+| Pause, restart or change level | **Menu** (top right), `Esc` to continue |
 
 The **i** button in the top right shows the controls in the game as well.
 
 ## Gameplay: race the night
 
-**20 fireflies** fly around the swamp. Eat **10** of them before the sun comes up, in **3 minutes**.
+**20 fireflies** fly around the swamp. Eat **10** of them before the sun comes up.
 
-- **The clock** (top center) starts with the frog's first move and counts down to sunrise. In the last 30 seconds it glows amber.
-- **Dawn comes slowly:** after about a minute the sky, fog, light and water start warming toward sunrise.
-- **Fireflies stay until eaten:** they only disappear when the frog eats them. A new night (Play again, Reset or a new frog) brings back all 20.
+### Start screen and levels
+
+The game opens on a start screen over the live swamp, with the camera slowly circling the frog. Pick a level:
+
+| Level | Time until sunrise |
+|---|---|
+| **Demo** | No clock: free play to learn the controls. You can't win or lose; the meter starts over after 10 and the fireflies come back when they are all eaten. |
+| **Easy** | 3 minutes |
+| **Medium** | 2 minutes |
+| **Hard** | 1 minute |
+
+Each level keeps its own **best time**, shown on its card. If a night was still going when you left, **Continue** picks it up again. The **Menu** button (top right) pauses the game and opens the same screen, with Continue, Restart and the levels.
+
+### The night
+
+- **The clock** (top center) starts with the frog's first move and counts down to sunrise. In the last 30 seconds (15 on Hard) it glows amber. It pauses while the menu is open.
+- **Dawn comes slowly:** from 40% of the way through the night, the sky, fog, light and water start warming toward sunrise.
+- **Fireflies stay until eaten:** they only disappear when the frog eats them. A new night (Play again, Restart, a new level or a new frog) brings back all 20.
 - **Catching:** press `F` when a firefly is within 1.5 m and roughly in front of the frog (up to 60° to either side). The tongue aims at it, stretches to reach it and pulls it into the mouth. This works on land and in the water.
 - **The lily-pad meter** (bottom left) lights up one dot for each firefly eaten.
-- **Ending the night:** eat 10 and you win: a "You won! Feast complete" card shows your time, and your **best time** is saved. If the sun comes up first you lose, and the "You lost: the sun is up" card shows how many you caught. Either way the frog stops moving until you press **Play again** or **Reset**.
+- **Ending the night:** eat 10 and you win: a "You won! Feast complete" card shows your time, and your **best time** is saved. If the sun comes up first you lose, and the "You lost: the sun is up" card shows how many you caught. Either way the frog stops moving until you press **Play again**, or **Menu** to pick another level.
 - **Progress is saved on your device:** the frog's position, the clock, the fireflies eaten, your best time and the camera mode all survive a refresh.
 - **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up. While the clock is running that loses the night: a "Kaboom! You lost" card offers **Play again**. Before the night starts, a new frog simply appears after 5 seconds.
 
