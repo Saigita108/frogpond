@@ -48,15 +48,15 @@ How it responds to interaction:
 
 ## Controls
 
-| Action | Keys |
+| Action | Keyboard and trackpad |
 |---|---|
 | Walk forward / backward | `W` / `S` or `↑` / `↓` |
 | Run (or swim fast) | Double-tap `W` / `↑` and hold the second press |
 | Turn | `A` / `D` or `←` / `→` |
 | Jump | `Space` |
 | Flick the tongue to eat a firefly | `F` |
-| Zoom | Pinch, or scroll the mouse wheel |
-| Look around the frog | Choose **Look around** (top left), then swipe or drag. `Esc` goes back to **Follow**. |
+| Zoom | Pinch on the trackpad |
+| Look around the frog | Choose **Look around** (top left), then swipe with two fingers. `Esc` goes back to **Follow**. |
 | Make ripples | Click the water |
 | Rain on / off | **Rain** switch (bottom right) |
 | Pause, restart or change level | **Menu** (top right), `Esc` to continue |
@@ -73,10 +73,12 @@ The game opens on a start screen over the live swamp, with the camera slowly cir
 
 | Level | Time until sunrise |
 |---|---|
-| **Demo** | No clock: free play to learn the controls. You can't win or lose; the meter starts over after 10 and the fireflies come back when they are all eaten. |
+| **Demo** | No clock: a guided tutorial, then free play. You can't win or lose; the meter starts over after 10 and the fireflies come back when they are all eaten. |
 | **Easy** | 3 minutes |
 | **Medium** | 2 minutes |
 | **Hard** | 1 minute |
+
+**The demo tutorial** ([`src/tutorial.js`](src/tutorial.js)): a coach card at the bottom of the screen teaches one thing at a time: walk, turn, walk backward, run, jump, find a firefly on the radar, eat it, swim, look around, back to follow, and finally the goal of the game. Each step watches what the frog actually does, fills a progress bar and moves on by itself; the part of the screen it talks about (radar, meter, camera switch, clock) glows. Every step can be skipped, and the last one offers **Choose a level** or **Keep practicing**.
 
 Each level keeps its own **best time**, shown on its card. If a night was still going when you left, **Continue** picks it up again. The **Menu** button (top right) pauses the game and opens the same screen, with Continue, Restart and the levels.
 

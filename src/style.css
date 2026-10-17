@@ -72,6 +72,7 @@ canvas {
 
 .controls-panel {
   box-sizing: border-box;
+  scrollbar-color: var(--edge) transparent;
   width: min(350px, calc(100vw - 32px));
   max-height: calc(100dvh - 100px);
   overflow-y: auto;
@@ -93,36 +94,6 @@ canvas {
   gap: 12px;
 }
 
-.device-toggle {
-  display: flex;
-  flex: 1;
-  padding: 4px;
-  border: 1px solid var(--edge-soft);
-  border-radius: 12px;
-  background: var(--moss-deep);
-}
-
-.device-toggle button {
-  flex: 1;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.device-toggle button:hover {
-  background: var(--moss-hover);
-}
-
-.device-toggle button[aria-pressed="true"],
-.camera-toggle button[aria-pressed="true"] {
-  background: var(--glow);
-  color: #1c3a29;
-  box-shadow: 0 0 12px #ffc94a80;
-}
-
 .controls-help .close-button {
   width: 30px;
   height: 30px;
@@ -133,7 +104,8 @@ canvas {
 }
 
 .controls-panel h2 {
-  margin: 22px 0 6px;
+  flex: 1;
+  margin: 0;
   color: var(--cream);
   font-family: Georgia, serif;
   font-size: 22px;
@@ -149,7 +121,7 @@ canvas {
 }
 
 .controls-intro {
-  margin: 0 0 18px;
+  margin: 10px 0 18px;
 }
 
 .shortcut-list {
@@ -235,6 +207,12 @@ canvas {
 
 .camera-toggle button:hover {
   background: var(--moss-hover);
+}
+
+.camera-toggle button[aria-pressed="true"] {
+  background: var(--glow);
+  color: #1c3a29;
+  box-shadow: 0 0 12px #ffc94a80;
 }
 
 @media (max-width: 480px) {
@@ -773,13 +751,16 @@ canvas {
 
 /* START SCREEN (also the pause menu) ---------------------------------------- */
 
-/* While it is open, the game's own controls step aside; the rain switch and the i button stay. */
+/* While it is open, the game's own controls step aside, including the i button and the rain switch. */
 body.menu-open .night-clock,
 body.menu-open .radar,
 body.menu-open .firefly-meter,
 body.menu-open .camera-toggle,
 body.menu-open .menu-button,
 body.menu-open .end-card,
+body.menu-open .coach,
+body.menu-open .controls-help,
+body.menu-open .rain-toggle,
 body.menu-open .screen-message {
   display: none;
 }
@@ -1046,5 +1027,242 @@ body.menu-open .screen-message {
 
   .start-level:hover {
     transform: none;
+  }
+}
+
+/* DEMO COACH (tutorial card, bottom center) --------------------------------- */
+
+.coach {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 6;
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 340px));
+  padding: 14px 18px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  background: var(--moss);
+  box-shadow: 0 12px 36px #050b1acc;
+  color: var(--text);
+  transform: translateX(-50%);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.coach[hidden] {
+  display: none;
+}
+
+.coach-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coach-step {
+  flex: 1;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.coach-skip,
+.coach-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: inherit;
+}
+
+.coach-skip {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.coach-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.coach-skip:hover,
+.coach-close:hover {
+  background: var(--moss-hover);
+  color: var(--text);
+}
+
+.coach-skip[hidden] {
+  display: none;
+}
+
+.coach-title {
+  margin: 4px 0 4px;
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-style: italic;
+  font-weight: normal;
+}
+
+/* A tick appears once the step is done. */
+.coach.is-done .coach-title::after {
+  content: ' ✓';
+  color: var(--glow);
+  font-style: normal;
+  text-shadow: 0 0 10px #ffc94a;
+}
+
+.coach.is-done {
+  border-color: var(--glow-edge);
+  box-shadow: 0 12px 36px #050b1acc, 0 0 18px #ffc94a40;
+}
+
+.coach-text {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.coach-text b {
+  color: var(--cream);
+}
+
+.coach-text kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--edge-soft);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--moss-deep);
+  color: var(--cream);
+  font-size: 11px;
+}
+
+.coach-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--moss-deep);
+}
+
+.coach-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--glow);
+  box-shadow: 0 0 8px #ffc94a;
+  transition: width 0.2s ease;
+}
+
+.coach.is-final .coach-progress {
+  display: none;
+}
+
+.coach-actions {
+  display: none;
+  gap: 10px;
+  justify-content: center;
+}
+
+.coach.is-final .coach-actions {
+  display: flex;
+}
+
+.coach-play {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--glow);
+  box-shadow: 0 0 14px #ffc94a80;
+  color: #1c3a29;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coach-practice {
+  padding: 10px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.coach-play:hover {
+  background: #fff0a8;
+}
+
+.coach-practice:hover {
+  background: var(--moss-hover);
+}
+
+.coach button:focus-visible {
+  outline: 2px solid var(--glow);
+  outline-offset: 2px;
+}
+
+/* The part of the screen the coach is talking about pulses amber. */
+.coach-highlight {
+  animation: coach-glow 1.4s ease-in-out infinite;
+}
+
+.radar.coach-highlight,
+.firefly-meter.coach-highlight {
+  animation: none;
+}
+
+.radar.coach-highlight canvas,
+.firefly-meter.coach-highlight svg {
+  animation: coach-glow-round 1.4s ease-in-out infinite;
+}
+
+@keyframes coach-glow {
+  0%, 100% { box-shadow: var(--shadow), 0 0 0 2px #ffe27a80, 0 0 12px #ffc94a40; }
+  50% { box-shadow: var(--shadow), 0 0 0 3px var(--glow), 0 0 24px #ffc94a99; }
+}
+
+@keyframes coach-glow-round {
+  0%, 100% { filter: drop-shadow(0 0 4px #ffc94a80); }
+  50% { filter: drop-shadow(0 0 14px var(--glow)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coach-highlight,
+  .radar.coach-highlight canvas,
+  .firefly-meter.coach-highlight svg {
+    animation: none;
+    box-shadow: var(--shadow), 0 0 0 3px var(--glow);
+  }
+
+  .coach-progress span {
+    transition: none;
+  }
+}
+
+/* Narrow screens: the corners are taken by the meter and the rain switch, so the coach
+   sits at the top, under the clock. */
+@media (max-width: 760px) {
+  .coach {
+    top: 84px;
+    bottom: auto;
+    width: min(440px, calc(100vw - 32px));
+  }
+}
+
+@media (max-width: 480px) {
+  .coach {
+    top: 128px;
   }
 }

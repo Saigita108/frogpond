@@ -10,6 +10,7 @@ import {
   loadBestTime, loadLevel, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveLevel, saveNightTime
 } from './night.js'
 import { mountStartScreen } from './start-screen.js'
+import { mountTutorial } from './tutorial.js'
 import { loadSwamp } from './swamp.js'
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -421,6 +422,26 @@ function stopFrogWalk() {
   for (const action of frogWalkActions) action.stop();
 }
 
+// What the frog has done so far, for the demo's tutorial (see tutorial.js).
+const practice = {
+  forward: 0,
+  backward: 0,
+  swum: 0,
+  turned: 0,
+  running: 0,
+  jumps: 0,
+  eaten: 0,
+  nearestFirefly: Infinity,
+  cameraMode: 'follow'
+};
+
+function recordMove(direction, run, moved, delta, swimming) {
+  if (direction > 0) practice.forward += moved;
+  if (direction < 0) practice.backward += moved;
+  if (run > 1 && moved > 0) practice.running += delta;
+  if (swimming) practice.swum += moved;
+}
+
 function updateFrogMovement(delta) {
   // The frog holds still while its tongue is out, and for good once the night is won or lost.
   if (!idleFrog || frogExploded || frogIsStriking) return 0;
@@ -432,6 +453,7 @@ function updateFrogMovement(delta) {
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
   frogPlacement.rotation.y += turn * frogTurnSpeed * delta;
+  practice.turned += Math.abs(turn) * frogTurnSpeed * delta;
   // Ponds slow the frog down (move/jump multipliers from the water's game properties).
   const speedMultiplier = frogPond?.props.move_speed_multiplier ?? 1;
   const jumpMultiplier = frogPond?.props.jump_strength_multiplier ?? 1;
@@ -454,7 +476,9 @@ function updateFrogMovement(delta) {
       action.setEffectiveTimeScale(direction ? direction * frogSwimTimeScale * run : frogFloatTimeScale);
     }
     frogSwimMixer.update(delta);
-    return moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+    const swam = moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+    recordMove(direction, run, swam, delta, true);
+    return swam;
   }
   if (!direction || !walkFrog || frogWalkActions.length === 0) {
     if (frogWalkDirection) stopFrogWalk();
@@ -476,12 +500,15 @@ function updateFrogMovement(delta) {
     action.setEffectiveTimeScale(direction * frogWalkTimeScale * speedMultiplier * run);
   }
   frogWalkMixer.update(delta);
-  return moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+  const walked = moveFrog(direction * frogWalkSpeed * speedMultiplier * run * delta, false);
+  recordMove(direction, run, walked, delta, false);
+  return walked;
 }
 
 function startFrogJump() {
   if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded || nightResult) return;
   frogIsJumping = true;
+  practice.jumps += 1;
   stopFrogWalk();
   showFrogModel();
   unfinishedJumpActions.clear();
@@ -610,12 +637,17 @@ function closeMenu() {
   startScreen.hide();
 }
 
+// The demo's tutorial: a coach card that teaches the controls and the goal step by step.
+const tutorial = mountTutorial(document.querySelector('#app'), { onChooseLevel: () => openMenu() });
+
 // A new frog, a full swarm and a fresh night on the chosen level.
 function startLevel(chosen) {
   level = chosen;
   saveLevel(level);
   closeMenu();
   resetGame();
+  if (isDemo()) tutorial.start();
+  else tutorial.stop();
 }
 
 window.addEventListener('pagehide', () => {
@@ -662,10 +694,15 @@ function refreshRadar() {
   radarFrog.z = frogPlacement.position.z;
   radarFrog.heading = frogPlacement.rotation.y;
   radarFireflies.length = 0;
+  practice.nearestFirefly = Infinity;
   for (const firefly of fireflies?.fireflies ?? []) {
     if (firefly.state !== 'flying') continue;
     fireflies.bodyPosition(firefly, fireflyPosition);
     radarFireflies.push({ x: fireflyPosition.x, z: fireflyPosition.z, alpha: 1 });
+    practice.nearestFirefly = Math.min(practice.nearestFirefly, Math.hypot(
+      fireflyPosition.x - radarFrog.x,
+      fireflyPosition.z - radarFrog.z
+    ));
   }
   updateRadar(radarFrog, radarFireflies);
 }
@@ -774,6 +811,7 @@ function updateFrogTongue(delta) {
 function swallowFirefly() {
   fireflies.swallow(tongueCatch);
   tongueCatch = null;
+  practice.eaten += 1;
   // The demo has no winning: after a full meter it starts counting again.
   if (isDemo() && firefliesEaten >= fireflyGoal) firefliesEaten = 0;
   firefliesEaten += 1;
@@ -1143,6 +1181,8 @@ renderer.setAnimationLoop(() => {
   updateNight(delta);
   refreshRadar();
   if (menuOpen) cameraYaw += delta * 0.15;
+  practice.cameraMode = cameraMode;
+  if (isDemo() && !menuOpen) tutorial.update(practice);
   frogSpeed = delta > 0 ? moved / delta : 0;
 
   updateFrogWater(elapsed, moved > 0);
