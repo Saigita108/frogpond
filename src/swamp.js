@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep, mix, normalize, texture, positionLocal, positionWorld } from 'three/tsl'
+import { Fn, float, vec2, vec3, mat3, uv, time, fract, length, pow, min, uniform, sin, cos, exp, smoothstep, mix, normalize, texture, positionLocal, positionWorld, floor, dot, abs, step } from 'three/tsl'
 import swampUrl from './assets/models/FrogGame_Swamp/swamp_world.glb?url'
 
 // Solid objects the frog can stand on (see README: ground, lily_pad, rock, log).
@@ -88,6 +88,28 @@ export async function loadSwamp(scene) {
 
   // 0 at night, 1 at sunrise: warms the sky dome and lightens the water.
   const dawn = uniform(0);
+  // 0 = dry, 1 = full rain: raindrops ring the ponds (the rain itself is in rain.js).
+  const rain = uniform(0);
+
+  // Small rings where raindrops hit the water. The pond is split into cells; each cell gets a
+  // drop at its own random spot and moment, once a second. Two offset grids keep it irregular.
+  const rainDrops = Fn(() => {
+    const lighting = float(0).toVar();
+    for (const [cellSize, offset] of [[0.7, 0], [0.9, 0.37]]) {
+      const cellPosition = positionWorld.xz.div(cellSize).add(offset);
+      const cell = floor(cellPosition);
+      const seed = fract(sin(dot(cell, vec2(12.9898, 78.233))).mul(43758.5453));
+      const age = fract(time.add(seed));
+      const center = vec2(seed, fract(seed.mul(17.13))).mul(0.6).add(0.2);
+      const distance = length(fract(cellPosition).sub(center));
+      // The ring grows to 0.2 of a cell, so it never gets cut off at the cell's edge.
+      const ring = smoothstep(0.04, 0, abs(distance.sub(age.mul(0.2))));
+      // Only about half the cells are hit at a time.
+      const active = step(0.45, fract(seed.mul(7.31)));
+      lighting.addAssign(ring.mul(float(1).sub(age).pow(2)).mul(active));
+    }
+    return lighting.mul(0.45).mul(rain);
+  });
 
   const waterRipples = Fn(() => {
     const distortion = vec2(0).toVar();
@@ -137,7 +159,7 @@ export async function loadSwamp(scene) {
     k.assign(k.mul(transform));
     const val3 = length(float(0.5).sub(fract(k.mul(0.5)))).toVar();
     const highlights = pow(min(min(val1, val2), val3), 7).mul(1.4);
-    return background.add(vec3(highlights)).add(vec3(ripple.z)).max(0);
+    return background.add(vec3(highlights)).add(vec3(ripple.z)).add(vec3(rainDrops())).max(0);
   });
 
   // Slightly see-through, so the pond floor and the frog's legs show underneath.
@@ -271,6 +293,9 @@ export async function loadSwamp(scene) {
     randomSpawn,
     setDawn(amount) {
       dawn.value = amount;
+    },
+    setRain(amount) {
+      rain.value = amount;
     },
     update(elapsed, camera) {
       rippleTime.value = (performance.now() - rippleStartedAt) / 1000;
