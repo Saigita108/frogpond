@@ -419,8 +419,12 @@ function stopFrogWalk() {
 }
 
 function updateFrogMovement(delta) {
-  // The frog holds still while its tongue is out.
+  // The frog holds still while its tongue is out, and for good once the night is won or lost.
   if (!idleFrog || frogExploded || frogIsStriking) return 0;
+  if (nightResult) {
+    if (frogWalkDirection) stopFrogWalk();
+    return 0;
+  }
   const held = (first, second) => frogKeys.has(first) || frogKeys.has(second);
   const turn = Number(held('KeyA', 'ArrowLeft')) - Number(held('KeyD', 'ArrowRight'));
   // Rotating the shared placement turns whichever model is currently visible.
@@ -473,7 +477,7 @@ function updateFrogMovement(delta) {
 }
 
 function startFrogJump() {
-  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded) return;
+  if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded || nightResult) return;
   frogIsJumping = true;
   stopFrogWalk();
   showFrogModel();
@@ -521,6 +525,10 @@ function startNight() {
 // restoring: showing a night that ended before a reload, whose best time was already recorded.
 function endNight(result, restoring = false) {
   nightResult = result;
+  // The game is over: the frog stops where it is until Play again or Reset.
+  frogKeys.clear();
+  frogRunning = false;
+  stopFrogWalk();
   // An exploded frog's night is already cleared, so a reload starts fresh.
   if (result !== 'exploded') saveNightTime(nightTime);
   const newBest = result === 'won' && !restoring && (bestTime === null || nightTime < bestTime);
@@ -574,9 +582,10 @@ const fireflyCount = 20;
 const fireflyGoal = 10;
 // Keep them clear of the edge warning zone, so none is lost to the explosion.
 const fireflyMargin = 26;
-// A firefly can be eaten when it is this close to the mouth and roughly in front of the frog.
-const tongueRange = 1;
-const tongueAimAngle = THREE.MathUtils.degToRad(35);
+// A firefly can be eaten when it is this close to the mouth (meters) and within this angle
+// to either side of where the frog faces.
+const tongueRange = 1.5;
+const tongueAimAngle = THREE.MathUtils.degToRad(60);
 let fireflies = null;
 // Eaten fireflies stay eaten across reloads; a new frog after an explosion starts over at 0.
 let firefliesEaten = loadFirefliesEaten(fireflyGoal);
@@ -696,8 +705,9 @@ function updateFrogTongue(delta) {
     aimTongue();
     if (time >= tongueHitTime) {
       tongueHasHit = true;
-      // It may have fluttered out of reach while the tongue was on its way.
-      if (tongueTarget && tongueDistanceTo(tongueTarget) !== null) tongueCatch = tongueTarget;
+      // The tongue follows its firefly, so once aimed it always catches it, even if the
+      // firefly fluttered a little out of reach on the way.
+      if (tongueTarget?.state === 'flying') tongueCatch = tongueTarget;
       tongueTarget = null;
     }
   } else {

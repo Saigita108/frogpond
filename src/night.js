@@ -62,9 +62,9 @@ export function mountNightClock(app, nightLength) {
     const text = {
       waiting: 'Move to start the night',
       running: 'until sunrise',
-      won: 'Feast complete',
-      sunrise: 'The sun is up',
-      exploded: 'Your frog exploded'
+      won: 'You won',
+      sunrise: 'You lost: sunrise',
+      exploded: 'You lost'
     }[state];
     const key = `${timeLeft}|${text}`;
     if (key === shown) return;
@@ -102,8 +102,8 @@ export function mountEndCard(app, onPlayAgain) {
     // outcome: 'won', 'sunrise' or 'exploded'.
     show({ result: outcome, eaten, total, time, bestTime, newBest }) {
       title.textContent = {
-        won: 'Feast complete!',
-        sunrise: 'The sun is up',
+        won: 'You won! Feast complete',
+        sunrise: 'You lost: the sun is up',
         exploded: 'Kaboom! You lost'
       }[outcome];
       result.textContent = {

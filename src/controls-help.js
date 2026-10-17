@@ -30,7 +30,7 @@ export function mountControlsHelp(app) {
     ['Turn', 'Hold <kbd>A</kbd> / <kbd>←</kbd> or <kbd>D</kbd> / <kbd>→</kbd>. The camera swings around with the frog.'],
     ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.'],
     ['Rain', 'Use the <b>Rain</b> switch in the bottom right to turn the rain, lightning and their sound on or off.'],
-    ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1 meter in front of the frog.']
+    ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1.5 meters away, anywhere roughly in front of the frog.']
   ];
   const guides = {
     trackpad: [
