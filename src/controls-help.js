@@ -26,6 +26,7 @@ export function mountControlsHelp(app) {
     ['Jump', 'Press <kbd>Space</kbd> to hop forward, onto lily pads, logs and rocks.'],
     ['Rain', 'Use the <b>Rain</b> switch in the bottom right to turn the rain, lightning and their sound on or off.'],
     ['Eat', 'Press <kbd>F</kbd> to flick your tongue. It catches a firefly up to 1.5 meters away, anywhere roughly in front of the frog.'],
+    ['Stay quiet', 'Your frog listens through the microphone (the browser asks when a game starts). A clap or a shout startles it: it hops three times in fright and can’t eat for 5 seconds.'],
     ['Zoom', 'Pinch two fingers together or apart.'],
     ['Look around', 'Pick <b>Look around</b> at the top left, then swipe with two fingers to swing the camera around the frog. Press <kbd>Esc</kbd> to go back to <b>Follow</b>.'],
   ];

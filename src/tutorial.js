@@ -4,7 +4,7 @@
 
 // Practice stats (all counted since the page opened, so each step compares with its start):
 // forward, backward, swum (meters), turned (radians), running (seconds), jumps, eaten,
-// nearestFirefly (meters), cameraMode ('follow' or 'look').
+// startles, nearestFirefly (meters), cameraMode ('follow' or 'look').
 const grow = (key, goal) => (stats, start) => (stats[key] - start[key]) / goal;
 
 const steps = [
@@ -66,6 +66,13 @@ const steps = [
     text: 'Face the firefly and press <kbd>F</kbd> when it is within 1.5 m. Your tongue does the aiming. The <b>lily pad</b> lights up a dot for each one you eat.',
     highlight: '.firefly-meter',
     progress: grow('eaten', 1)
+  },
+  {
+    title: 'Shh, stay quiet',
+    text: 'Your frog listens through the microphone. A loud sound, like a clap or a shout, startles it: it hops three times in fright and is too shocked to eat for 5 seconds. So keep it down, especially near the edge!',
+    // Nothing to do here: Got it moves on (or startling the frog to try it out).
+    acknowledge: 'Got it',
+    progress: grow('startles', 1)
   },
   {
     title: 'The goal',
@@ -148,6 +155,8 @@ export function mountTutorial(app, { onChooseLevel }) {
     card.classList.remove('is-done');
     card.classList.toggle('is-final', Boolean(step.final));
     skip.hidden = Boolean(step.final);
+    skip.textContent = step.acknowledge ?? 'Skip';
+    card.classList.toggle('is-info', Boolean(step.acknowledge));
     setHighlight(step.highlight);
   }
 
