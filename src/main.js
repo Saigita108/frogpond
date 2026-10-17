@@ -6,6 +6,7 @@ import { loadFireflies } from './fireflies.js'
 import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
 import { mountRadar } from './radar.js'
 import { createRain } from './rain.js'
+import { createMicrophone } from './microphone.js'
 import {
   loadBestTime, loadLevel, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveLevel, saveNightTime
 } from './night.js'
@@ -431,6 +432,7 @@ const practice = {
   running: 0,
   jumps: 0,
   eaten: 0,
+  startles: 0,
   nearestFirefly: Infinity,
   cameraMode: 'follow'
 };
@@ -463,7 +465,7 @@ function updateFrogMovement(delta) {
     const [takeoff, landing] = frogJumpAirborne;
     if (jumpTime < takeoff || jumpTime > landing) return 0;
     const jumpSpeed = frogJumpDistance * jumpMultiplier / (landing - takeoff);
-    return moveFrog(jumpSpeed * delta, true);
+    return moveFrog(jumpSpeed * frogJumpTimeScale * delta, true);
   }
 
   const direction = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
@@ -505,16 +507,20 @@ function updateFrogMovement(delta) {
   return walked;
 }
 
-function startFrogJump() {
+// timeScale > 1 plays the jump faster (the startled hops); the frog still covers the same distance.
+let frogJumpTimeScale = 1;
+
+function startFrogJump(timeScale = 1) {
   if (!idleFrog || frogJumpActions.length === 0 || frogIsJumping || frogIsStriking || frogExploded || nightResult) return;
   frogIsJumping = true;
+  frogJumpTimeScale = timeScale;
   practice.jumps += 1;
   stopFrogWalk();
   showFrogModel();
   unfinishedJumpActions.clear();
   for (const action of frogJumpActions) {
     unfinishedJumpActions.add(action);
-    action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+    action.reset().setEffectiveTimeScale(timeScale).setEffectiveWeight(1).play();
   }
   frogJumpMixer.update(0);
 }
@@ -618,7 +624,11 @@ function updateNight(delta) {
 let menuOpen = false;
 const startScreen = mountStartScreen(document.querySelector('#app'), levels, {
   onPlay: (chosen) => startLevel(chosen),
-  onContinue: () => closeMenu()
+  onContinue: () => {
+    closeMenu();
+    // Starting a game is when the browser may ask for the microphone (it ignores repeats).
+    microphone.enable();
+  }
 });
 
 // A finished night can't be continued, and neither can the demo once its tutorial is over.
@@ -651,6 +661,7 @@ function startLevel(chosen) {
   level = chosen;
   saveLevel(level);
   closeMenu();
+  microphone.enable();
   resetGame();
   if (isDemo()) tutorial.start();
   else tutorial.stop();
@@ -766,7 +777,13 @@ function aimTongue() {
 function startFrogTongue() {
   if (!idleFrog || !tongueAim || frogTongueActions.length === 0) return;
   // Once the night is over the score is final.
-  if (frogIsStriking || frogIsJumping || frogExploded || nightResult) return;
+  if (frogExploded || nightResult) return;
+  // A startled frog is too shocked to eat (even mid-hop, so the warning shows).
+  if (shockedFor > 0) {
+    shakeShockStatus();
+    return;
+  }
+  if (frogIsStriking || frogIsJumping) return;
   if (frogIsSwimming()) swamp.addRipple(frogPlacement.position.x, frogPlacement.position.z, 0.8);
   frogIsStriking = true;
   stopFrogWalk();
@@ -839,6 +856,73 @@ function finishFrogTongue() {
   tongueTarget = null;
   for (const action of frogTongueActions) action.stop();
   showFrogModel();
+}
+
+// STARTLE (MICROPHONE) -------------------------------------------------------
+// A sudden loud sound in the microphone (a clap, a shout) startles the frog: it makes three
+// quick hops, each in a slightly random direction, and is too shocked to eat for 5 seconds.
+const startleHops = 3;
+const startleHopSpeed = 2.4; // times the normal jump speed
+const shockDuration = 5;
+let startleHopsLeft = 0;
+let shockedFor = 0;
+
+function startleFrog() {
+  if (!idleFrog || frogExploded || menuOpen || nightResult || startleHopsLeft > 0 || shockedFor > 0) return;
+  practice.startles += 1;
+  startNight();
+  frogKeys.clear();
+  frogRunning = false;
+  startleHopsLeft = startleHops;
+  shockedFor = shockDuration;
+}
+
+// Called every frame: the next hop starts as soon as the frog has landed (and its tongue is in).
+function updateStartle(delta) {
+  if (menuOpen) return;
+  if (startleHopsLeft > 0 && !frogIsJumping && !frogIsStriking && !frogExploded && !nightResult) {
+    startleHopsLeft -= 1;
+    frogPlacement.rotation.y += (Math.random() - 0.5) * Math.PI / 2;
+    startFrogJump(startleHopSpeed);
+  }
+  shockedFor = Math.max(shockedFor - delta, 0);
+  showShockStatus(shockedFor);
+}
+
+function calmFrog() {
+  startleHopsLeft = 0;
+  shockedFor = 0;
+  showShockStatus(0);
+}
+
+// The pill under the clock while the frog is shocked; it shakes if you try to eat.
+const shockStatus = document.createElement('div');
+shockStatus.className = 'shock-status';
+shockStatus.setAttribute('role', 'status');
+shockStatus.hidden = true;
+document.querySelector('#app').appendChild(shockStatus);
+let shownShock = null;
+
+function showShockStatus(seconds) {
+  const text = seconds > 0 ? `Startled! Too shocked to eat for ${Math.ceil(seconds)} s` : null;
+  if (text === shownShock) return;
+  shownShock = text;
+  shockStatus.hidden = text === null;
+  if (text) shockStatus.textContent = text;
+}
+
+function shakeShockStatus() {
+  shockStatus.classList.remove('is-shaking');
+  shockStatus.getBoundingClientRect();
+  shockStatus.classList.add('is-shaking');
+}
+
+// The microphone switches on when a game starts (the browser asks for permission then).
+// Without one, or if it is blocked, the game simply plays without startles.
+const microphone = createMicrophone();
+
+function listenForStartle(delta) {
+  if (microphone.listen(delta).loud) startleFrog();
 }
 
 window.addEventListener('keydown', (event) => {
@@ -1082,6 +1166,7 @@ function startRespawnCountdown() {
 
 function explodeFrog() {
   frogExploded = true;
+  calmFrog();
   frogKeys.clear();
   stopFrogWalk();
   if (frogIsJumping) {
@@ -1153,6 +1238,7 @@ function resetGame() {
     for (const action of frogJumpActions) action.stop();
   }
   if (frogIsStriking) finishFrogTongue();
+  calmFrog();
   spawnNewFrog();
   showFrogModel();
 }
@@ -1183,6 +1269,8 @@ renderer.setAnimationLoop(() => {
   frogMixer?.update(delta);
   const moved = updateFrogMovement(delta);
   if (frogIsJumping) frogJumpMixer.update(delta);
+  listenForStartle(delta);
+  updateStartle(delta);
   updateFrogTongue(delta);
   fireflies?.update(delta, frogPlacement.position);
   updateNight(delta);

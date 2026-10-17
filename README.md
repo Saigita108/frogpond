@@ -59,6 +59,7 @@ How it responds to interaction:
 | Look around the frog | Choose **Look around** (top left), then swipe with two fingers. `Esc` goes back to **Follow**. |
 | Make ripples | Click the water |
 | Rain on / off | **Rain** switch (bottom right) |
+| Startle the frog (don't!) | Clap or shout into the microphone |
 | Pause, restart or change level | **Menu** (top right), `Esc` to continue |
 
 The **i** button in the top right shows the controls in the game as well.
@@ -98,6 +99,8 @@ Each level keeps its own **best time**, shown on its card. If a night was still 
 ### Interaction beyond looking around
 
 Walking, jumping, swimming and eating fireflies, plus ripples in the water shader, plants that bend as the frog passes, the exploding frog and respawn, and a saved score.
+
+**Voice / microphone** ([`src/microphone.js`](src/microphone.js)): the frog listens. When a game starts, the browser asks for the microphone; from then on a sudden loud sound (a clap or a shout) startles the frog. It makes three quick hops, each in a slightly random direction, and is too shocked to eat for 5 seconds: a "Startled!" pill counts down under the clock, and shakes if you press `F`. The demo tutorial tells you to stay quiet. The loudness is measured with the Web Audio API and compared with the room's background noise, so a noisy room or the game's own rain doesn't keep startling the frog. Nothing is recorded or sent anywhere. Without a microphone, or if permission is refused, the game plays normally without startles. The microphone needs HTTPS (GitHub Pages) or `localhost`.
 
 ### Physics (hand-written, no physics engine)
 

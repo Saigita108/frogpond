@@ -761,6 +761,7 @@ body.menu-open .end-card,
 body.menu-open .coach,
 body.menu-open .controls-help,
 body.menu-open .rain-toggle,
+body.menu-open .shock-status,
 body.menu-open .screen-message {
   display: none;
 }
@@ -1161,8 +1162,23 @@ body.menu-open .screen-message {
   transition: width 0.2s ease;
 }
 
-.coach.is-final .coach-progress {
+.coach.is-final .coach-progress,
+.coach.is-info .coach-progress {
   display: none;
+}
+
+/* On a step that only explains something, Skip becomes a clear "Got it" button. */
+.coach.is-info .coach-skip {
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--glow);
+  box-shadow: 0 0 10px #ffc94a80;
+  color: #1c3a29;
+  font-weight: 700;
+}
+
+.coach.is-info .coach-skip:hover {
+  background: #fff0a8;
 }
 
 .coach-actions {
@@ -1264,5 +1280,52 @@ body.menu-open .screen-message {
 @media (max-width: 480px) {
   .coach {
     top: 128px;
+  }
+}
+
+/* SHOCK STATUS (under the clock) ------------------------------------------- */
+
+.shock-status {
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  z-index: 10;
+  padding: 6px 14px;
+  border: 1px solid #e0937d;
+  border-radius: 16px;
+  background: #0b1733e6;
+  box-shadow: var(--shadow), 0 0 12px #e0937d40;
+  color: #f6c9bb;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.shock-status[hidden] {
+  display: none;
+}
+
+.shock-status.is-shaking {
+  animation: shock-shake 0.4s ease;
+}
+
+@keyframes shock-shake {
+  0%, 100% { transform: translateX(-50%); }
+  20% { transform: translateX(calc(-50% - 6px)); }
+  40% { transform: translateX(calc(-50% + 6px)); }
+  60% { transform: translateX(calc(-50% - 4px)); }
+  80% { transform: translateX(calc(-50% + 4px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shock-status.is-shaking {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .shock-status {
+    top: 124px;
   }
 }
