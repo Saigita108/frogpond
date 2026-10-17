@@ -621,7 +621,13 @@ const startScreen = mountStartScreen(document.querySelector('#app'), levels, {
   onContinue: () => closeMenu()
 });
 
-function openMenu(canContinue = level !== null && !nightResult) {
+// A finished night can't be continued, and neither can the demo once its tutorial is over.
+function canContinueNight() {
+  if (level === null || nightResult) return false;
+  return !isDemo() || tutorial.isActive();
+}
+
+function openMenu(canContinue = canContinueNight()) {
   menuOpen = true;
   frogKeys.clear();
   frogRunning = false;
@@ -1161,7 +1167,8 @@ menuButton.addEventListener('click', () => openMenu());
 document.querySelector('#app').appendChild(menuButton);
 
 // LOOP ------------------------------------------------------------------------
-openMenu(level !== null && !savedNightFinished);
+// After a reload, a real level's night can be continued, but the demo always starts over.
+openMenu(level !== null && !savedNightFinished && !isDemo());
 placeCamera(0, true);
 camera.position.copy(cameraGoal);
 

@@ -9,6 +9,18 @@ const grow = (key, goal) => (stats, start) => (stats[key] - start[key]) / goal;
 
 const steps = [
   {
+    title: 'Look around',
+    text: 'Pick <b>Look around</b> at the top left, then swipe with two fingers to swing the camera around your frog. Pinch to zoom.',
+    highlight: '.camera-toggle',
+    progress: (stats) => (stats.cameraMode === 'look' ? 1 : 0)
+  },
+  {
+    title: 'Back to Follow',
+    text: 'Press <kbd>Esc</kbd> or pick <b>Follow</b> to put the camera back behind your frog.',
+    highlight: '.camera-toggle',
+    progress: (stats) => (stats.cameraMode === 'follow' ? 1 : 0)
+  },
+  {
     title: 'Walk',
     text: 'Hold <kbd>W</kbd> or <kbd>↑</kbd> to hop forward.',
     progress: grow('forward', 3)
@@ -34,6 +46,11 @@ const steps = [
     progress: grow('jumps', 1)
   },
   {
+    title: 'Swim',
+    text: 'Hop into a pond and swim. Ponds slow you down, so double-tap <kbd>W</kbd> to swim faster. You can eat fireflies in the water too.',
+    progress: grow('swum', 2)
+  },
+  {
     title: 'Find a firefly',
     text: 'The <b>radar</b> shows fireflies within 20 m as yellow dots. The arrow is you, so a dot above it is straight ahead. Walk to one.',
     highlight: '.radar',
@@ -51,25 +68,8 @@ const steps = [
     progress: grow('eaten', 1)
   },
   {
-    title: 'Swim',
-    text: 'Hop into a pond and swim. Ponds slow you down, so double-tap <kbd>W</kbd> to swim faster. You can eat fireflies in the water too.',
-    progress: grow('swum', 2)
-  },
-  {
-    title: 'Look around',
-    text: 'Pick <b>Look around</b> at the top left, then swipe with two fingers to swing the camera around your frog. Pinch to zoom.',
-    highlight: '.camera-toggle',
-    progress: (stats) => (stats.cameraMode === 'look' ? 1 : 0)
-  },
-  {
-    title: 'Back to Follow',
-    text: 'Press <kbd>Esc</kbd> or pick <b>Follow</b> to put the camera back behind your frog.',
-    highlight: '.camera-toggle',
-    progress: (stats) => (stats.cameraMode === 'follow' ? 1 : 0)
-  },
-  {
     title: 'The goal',
-    text: 'In a real level, eat <b>10 fireflies</b> before the <b>clock</b> at the top runs out and the sun comes up. Stay away from the edge of the swamp: touching it blows your frog up. The <b>Rain</b> switch is in the bottom right. Want to refresh the info? Click the <b>i</b> button in the top right.',
+    text: '1. In a real level, eat <b>10 fireflies</b> before the <b>clock</b> at the top runs out and the sun comes up. </br> 2. Stay away from the edge of the swamp: touching it blows your frog up. </br> 3. Want to refresh the info? Click the <b>i</b> button in the top right.',
     highlight: '.night-clock, .firefly-meter, .info-button',
     final: true
   }
@@ -164,6 +164,8 @@ export function mountTutorial(app, { onChooseLevel }) {
       showStep(0);
     },
     stop,
+    // True while the coach is still going through its steps.
+    isActive: () => index >= 0,
     // Called every frame in the demo with the latest practice stats.
     update(stats) {
       latest = stats;
