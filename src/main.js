@@ -7,6 +7,7 @@ import { loadFireflies } from './fireflies.js'
 import { loadFirefliesEaten, mountFireflyMeter, saveFirefliesEaten } from './firefly-meter.js'
 import { mountRadar } from './radar.js'
 import { createRain } from './rain.js'
+import { createSwampSound } from './swamp-sound.js'
 import { createMicrophone } from './microphone.js'
 import {
   loadBestTime, loadLevel, loadNightTime, mountEndCard, mountNightClock, saveBestTime, saveLevel, saveNightTime
@@ -73,6 +74,9 @@ function loadRaining() {
 
 let raining = loadRaining();
 const rain = createRain(scene, swamp, raining);
+
+// The swamp's ambience and croaking during a game, and the buzz of a nearby firefly.
+const swampSound = createSwampSound();
 
 const rainButton = document.createElement('button');
 rainButton.type = 'button';
@@ -1281,6 +1285,8 @@ renderer.setAnimationLoop(() => {
   fireflies?.update(delta, frogPlacement.position);
   updateNight(delta);
   refreshRadar();
+  swampSound.setPlaying(!menuOpen);
+  swampSound.setNearestFirefly(frogExploded ? Infinity : practice.nearestFirefly);
   if (menuOpen) cameraYaw += delta * 0.15;
   practice.cameraMode = cameraMode;
   if (isDemo() && !menuOpen) tutorial.update(practice);
