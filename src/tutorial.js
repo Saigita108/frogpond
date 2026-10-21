@@ -72,6 +72,8 @@ const steps = [
     text: 'Your frog listens through the microphone. A loud sound, like a clap or a shout, startles it: it hops three times in fright and is too shocked to eat for 5 seconds. So keep it down, especially near the edge!',
     // Nothing to do here: Got it moves on (or startling the frog to try it out).
     acknowledge: 'Got it',
+    // In the demo, loud sounds only startle the frog from this step on.
+    introducesSound: true,
     progress: grow('startles', 1)
   },
   {
@@ -146,6 +148,7 @@ export function mountTutorial(app, { onChooseLevel }) {
     }
     index = next;
     const step = steps[index];
+    if (step.introducesSound) soundIntroduced = true;
     start = latest && { ...latest };
     done = false;
     stepLabel.textContent = `Step ${index + 1} of ${steps.length}`;
@@ -160,6 +163,9 @@ export function mountTutorial(app, { onChooseLevel }) {
     setHighlight(step.highlight);
   }
 
+  // Whether the coach has told the player that loud sounds startle the frog (this demo).
+  let soundIntroduced = false;
+
   function stop() {
     clearTimeout(doneTimer);
     index = -1;
@@ -169,12 +175,14 @@ export function mountTutorial(app, { onChooseLevel }) {
 
   return {
     start() {
+      soundIntroduced = false;
       card.hidden = false;
       showStep(0);
     },
     stop,
     // True while the coach is still going through its steps.
     isActive: () => index >= 0,
+    soundIntroduced: () => soundIntroduced,
     // Called every frame in the demo with the latest practice stats.
     update(stats) {
       latest = stats;

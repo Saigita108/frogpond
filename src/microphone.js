@@ -2,9 +2,11 @@
 // Nothing is recorded or sent anywhere: the sound is only measured, frame by frame.
 // Without a microphone (none, blocked, or no HTTPS) it stays quiet and the game plays as usual.
 
-// A sound must be at least this loud (RMS of the waveform, 0..1) to startle the frog...
-const minimumLoudness = 0.12;
-// ...and this many times louder than the room's background noise.
+// A sound startles the frog when it is loud on average (RMS of the waveform, 0..1) or has a
+// sharp peak, like the crack of a clap, which is too short to raise the average much...
+const minimumLoudness = 0.05;
+const minimumPeak = 0.3;
+// ...and is this many times louder than the room's background noise.
 const aboveBackground = 4;
 
 export function createMicrophone({ onStateChange = () => {} } = {}) {
@@ -18,6 +20,8 @@ export function createMicrophone({ onStateChange = () => {} } = {}) {
 
   function setState(next) {
     state = next;
+    // Shown in the browser console, to check whether the frog can hear you.
+    console.info(`Frog Pond microphone: ${state}`);
     onStateChange(state);
   }
 
@@ -41,9 +45,10 @@ export function createMicrophone({ onStateChange = () => {} } = {}) {
     setState('starting');
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        // Echo cancellation keeps the game's own rain and thunder from startling the frog.
-        // The rest is off, so a clap reaches us at its real loudness.
-        audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false }
+        // All processing off, so a clap reaches us at its real loudness. (Echo cancellation
+        // would treat a clap over the game's rain sound as echo and turn it right down; the
+        // rain is steady, so it just becomes part of the background noise below.)
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
       });
     } catch {
       // No microphone, or the player said no: carry on without startles.
@@ -56,6 +61,11 @@ export function createMicrophone({ onStateChange = () => {} } = {}) {
     analyser.fftSize = 1024;
     samples = new Float32Array(analyser.fftSize);
     context.createMediaStreamSource(stream).connect(analyser);
+    // Safari only feeds an analyser that leads to the speakers, so connect it through a
+    // silent gain (nothing from the microphone is ever heard).
+    const silence = context.createGain();
+    silence.gain.value = 0;
+    analyser.connect(silence).connect(context.destination);
     if (context.state !== 'running') {
       context.resume();
       for (const type of unlockEvents) window.addEventListener(type, unlock, true);
@@ -82,9 +92,14 @@ export function createMicrophone({ onStateChange = () => {} } = {}) {
       if (!analyser) return { level: 0, loud: false };
       analyser.getFloatTimeDomainData(samples);
       let sum = 0;
-      for (const sample of samples) sum += sample * sample;
+      let peak = 0;
+      for (const sample of samples) {
+        sum += sample * sample;
+        peak = Math.max(peak, Math.abs(sample));
+      }
       const loudness = Math.sqrt(sum / samples.length);
-      const loud = loudness > Math.max(minimumLoudness, background * aboveBackground);
+      const loud = (loudness > minimumLoudness || peak > minimumPeak)
+        && loudness > background * aboveBackground;
       if (!loud) background += (loudness - background) * Math.min(1, delta * 0.5);
       return { level: Math.min(loudness / minimumLoudness, 1), loud };
     }
