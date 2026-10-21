@@ -1197,6 +1197,7 @@ function explodeFrog() {
   const afterBlast = losesNight ? () => endNight('exploded') : startRespawnCountdown;
   if (explosion) {
     explosion.play(frogPlacement.position, afterBlast);
+    swampSound.explode();
   } else {
     afterBlast();
   }

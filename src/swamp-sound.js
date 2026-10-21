@@ -1,10 +1,11 @@
 // The swamp's own sounds while playing: a soft ambient night, frogs croaking in the distance,
 // the buzz of fireflies, which gets louder as the frog closes in on one, and splashing while
-// the frog swims.
+// the frog swims. Plus the bang when the frog blows up.
 import ambientUrl from './assets/sounds/ambient.mp3?url'
 import croakUrl from './assets/sounds/croak.mp3?url'
 import buzzingUrl from './assets/sounds/buzzing.mp3?url'
 import swimmingUrl from './assets/sounds/swimming.mp3?url'
+import explosionUrl from './assets/sounds/explosion.mp3?url'
 
 const ambientVolume = 0.25;
 const croakVolume = 0.4;
@@ -15,6 +16,7 @@ const swimVolume = 0.5;
 // The splashing eases in as the frog slips into the water and trails off after it climbs out.
 const swimFadeIn = 0.5;
 const swimFadeOut = 1.2;
+const explosionVolume = 0.8;
 // How quickly the background fades in and out when a game starts or the menu opens (seconds).
 const fade = 0.6;
 
@@ -25,6 +27,7 @@ export function createSwampSound() {
   let buzz = null;
   let swim = null;
   let swimming = false;
+  let explosionSound = null;
   let playing = false;
   let buzzLevel = 0;
 
@@ -45,6 +48,17 @@ export function createSwampSound() {
       console.error('Could not load a swamp sound:', error);
     }
     return gain;
+  }
+
+  // A sound that plays once each time it is asked for, loaded up front so it plays without delay.
+  async function oneShot(url) {
+    try {
+      const response = await fetch(url);
+      return await context.decodeAudioData(await response.arrayBuffer());
+    } catch (error) {
+      console.error('Could not load a swamp sound:', error);
+      return null;
+    }
   }
 
   function fadeTo(gain, volume, seconds = fade) {
@@ -73,6 +87,9 @@ export function createSwampSound() {
     loop(swimmingUrl).then((gain) => {
       swim = gain;
       if (swimming) fadeTo(swim, swimVolume, swimFadeIn);
+    });
+    oneShot(explosionUrl).then((buffer) => {
+      explosionSound = buffer;
     });
   }
 
@@ -109,6 +126,18 @@ export function createSwampSound() {
       if (on === swimming) return;
       swimming = on;
       fadeTo(swim, on ? swimVolume : 0, on ? swimFadeIn : swimFadeOut);
+    },
+    // The bang, the moment the explosion appears.
+    explode() {
+      if (!explosionSound || context.state !== 'running') return;
+      const gain = context.createGain();
+      gain.gain.value = explosionVolume;
+      gain.connect(context.destination);
+      const source = context.createBufferSource();
+      source.buffer = explosionSound;
+      source.connect(gain);
+      source.start();
+      source.addEventListener('ended', () => gain.disconnect());
     },
     // Call every frame with the distance to the nearest flying firefly (Infinity for none).
     setNearestFirefly(distance) {
