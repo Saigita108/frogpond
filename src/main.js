@@ -924,7 +924,11 @@ function shakeShockStatus() {
 const microphone = createMicrophone();
 
 function listenForStartle(delta) {
-  if (microphone.listen(delta).loud) startleFrog();
+  // Keep listening (the microphone follows the room's background noise), but in the demo a
+  // loud sound only startles the frog once the coach has explained it.
+  const { loud } = microphone.listen(delta);
+  if (isDemo() && !tutorial.soundIntroduced()) return;
+  if (loud) startleFrog();
 }
 
 window.addEventListener('keydown', (event) => {
