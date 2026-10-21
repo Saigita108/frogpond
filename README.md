@@ -89,7 +89,7 @@ Each level keeps its own **best time**, shown on its card. If a night was still 
 - **Dawn comes slowly:** from 40% of the way through the night, the sky, fog, light and water start warming toward sunrise.
 - **Fireflies stay until eaten:** they only disappear when the frog eats them. A new night (Play again, Restart, a new level or a new frog) brings back all 20.
 - **Catching:** press `F` when a firefly is within 1.5 m and roughly in front of the frog (up to 60° to either side). The tongue aims at it, stretches to reach it and pulls it into the mouth. This works on land and in the water.
-- **The lily-pad meter** (bottom left) lights up one dot for each firefly eaten.
+- **The firefly meter** (bottom left) shows the count and lights up one firefly for each one eaten.
 - **Ending the night:** eat 10 and you win: a "You won! Feast complete" card shows your time, and your **best time** is saved. If the sun comes up first you lose, and the "You lost: the sun is up" card shows how many you caught. Either way the frog stops moving until you press **Play again**, or **Menu** to pick another level.
 - **Progress is saved on your device:** the frog's position, the clock, the fireflies eaten, your best time and the camera mode all survive a refresh.
 - **The world edge:** within 5 m of the edge a warning counts down the distance. Touching the edge blows the frog up. While the clock is running that loses the night: a "Kaboom! You lost" card offers **Play again**. Before the night starts, a new frog simply appears after 5 seconds.

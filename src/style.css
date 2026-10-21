@@ -1,4 +1,4 @@
-/* Swamp-at-night palette, shared with the lily-pad firefly meter. */
+/* Swamp-at-night palette, shared by every panel. */
 :root {
   --night: #0b1733;
   --moss: linear-gradient(160deg, #24452f, #12271c);
@@ -272,6 +272,8 @@ canvas {
 }
 
 /* FIREFLY METER ------------------------------------------------------------ */
+/* A wide card in the bottom left (unlike the round radar): the count, and a row of fireflies
+   whose tails light up as they are eaten. */
 
 .firefly-meter {
   position: fixed;
@@ -280,51 +282,97 @@ canvas {
   z-index: 5;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--moss);
+  box-shadow: var(--shadow);
+  color: var(--text);
   pointer-events: none;
 }
 
-.firefly-meter svg {
-  display: block;
-  width: 124px;
-  height: 124px;
-  overflow: visible;
-  filter: drop-shadow(0 6px 16px #050b1a99);
+.firefly-meter-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.firefly-meter-pad {
-  fill: url(#firefly-meter-pad);
-  stroke: #5d8a5c;
-  stroke-width: 1.2;
-  stroke-linejoin: round;
+.firefly-meter-label {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.firefly-meter-veins line {
-  stroke: #6f9a6a;
-  stroke-width: 0.8;
-  stroke-linecap: round;
-  opacity: 0.35;
+.firefly-meter-score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
 }
 
-.firefly-meter-hollow {
-  fill: #12261b;
-  opacity: 0.55;
+.firefly-meter-count {
+  color: var(--cream);
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-style: italic;
+  line-height: 1;
+}
+
+.firefly-meter-total {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.firefly-meter-row {
+  display: flex;
+  gap: 5px;
 }
 
 .firefly-meter-dot {
-  fill: #13261b;
+  display: block;
+  width: 18px;
+  height: 22px;
+  overflow: visible;
+  transition: filter 0.4s ease;
+}
+
+.firefly-meter-wing {
+  fill: #a9c79f22;
+  stroke: #4c7a50;
+  stroke-width: 0.7;
+}
+
+.firefly-meter-head {
+  fill: #2a4a33;
+}
+
+.firefly-meter-tail {
+  fill: var(--moss-deep);
   stroke: #4c7a50;
   stroke-width: 0.8;
-  transform-box: fill-box;
-  transform-origin: center;
   transition: fill 0.4s ease, stroke 0.4s ease;
 }
 
 .firefly-meter-dot.is-lit {
-  fill: #ffe27a;
-  stroke: #ffc94a;
-  filter: url(#firefly-meter-glow);
+  filter: drop-shadow(0 0 4px var(--glow-edge));
+}
+
+.firefly-meter-dot.is-lit .firefly-meter-wing {
+  fill: #fbefc433;
+  stroke: #a9c79f;
+}
+
+.firefly-meter-dot.is-lit .firefly-meter-head {
+  fill: #4c7a50;
+}
+
+.firefly-meter-dot.is-lit .firefly-meter-tail {
+  fill: var(--glow);
+  stroke: var(--glow-edge);
 }
 
 .firefly-meter-dot.is-new {
@@ -332,40 +380,13 @@ canvas {
 }
 
 @keyframes firefly-meter-flare {
-  0% { transform: scale(2.6); fill: #fff6c8; }
-  100% { transform: scale(1); }
-}
-
-.firefly-meter-count {
-  fill: #fbefc4;
-  font-family: Georgia, serif;
-  font-size: 24px;
-  font-style: italic;
-  text-anchor: middle;
-}
-
-.firefly-meter-total {
-  fill: #a9c79f;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-anchor: middle;
-}
-
-.firefly-meter-label {
-  padding: 4px 12px;
-  border: 1px solid #3f6145;
-  border-radius: 10px;
-  background: #0b1733cc;
-  color: #d6e6c8;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  0% { transform: scale(1.8) translateY(-4px); filter: drop-shadow(0 0 10px #fff6c8); }
+  100% { transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .firefly-meter-dot {
+  .firefly-meter-dot,
+  .firefly-meter-tail {
     transition: none;
   }
 
@@ -380,9 +401,9 @@ canvas {
     left: 16px;
   }
 
-  .firefly-meter svg {
-    width: 100px;
-    height: 100px;
+  .firefly-meter-dot {
+    width: 12px;
+    height: 15px;
   }
 }
 
@@ -1253,13 +1274,11 @@ body.menu-open .screen-message {
   animation: coach-glow 1.4s ease-in-out infinite;
 }
 
-.radar.coach-highlight,
-.firefly-meter.coach-highlight {
+.radar.coach-highlight {
   animation: none;
 }
 
-.radar.coach-highlight canvas,
-.firefly-meter.coach-highlight svg {
+.radar.coach-highlight canvas {
   animation: coach-glow-round 1.4s ease-in-out infinite;
 }
 
@@ -1275,8 +1294,7 @@ body.menu-open .screen-message {
 
 @media (prefers-reduced-motion: reduce) {
   .coach-highlight,
-  .radar.coach-highlight canvas,
-  .firefly-meter.coach-highlight svg {
+  .radar.coach-highlight canvas {
     animation: none;
     box-shadow: var(--shadow), 0 0 0 3px var(--glow);
   }

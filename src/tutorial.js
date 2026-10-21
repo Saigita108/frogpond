@@ -63,7 +63,7 @@ const steps = [
   },
   {
     title: 'Eat it',
-    text: 'Face the firefly and press <kbd>F</kbd> when it is within 1.5 m. Your tongue does the aiming. The <b>lily pad</b> lights up a dot for each one you eat.',
+    text: 'Face the firefly and press <kbd>F</kbd> when it is within 1.5 m. Your tongue does the aiming. The <b>meter</b> at the bottom left lights up a firefly for each one you eat.',
     highlight: '.firefly-meter',
     progress: grow('eaten', 1)
   },
