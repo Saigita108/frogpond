@@ -1,14 +1,20 @@
 // The swamp's own sounds while playing: a soft ambient night, frogs croaking in the distance,
-// and the buzz of fireflies, which gets louder as the frog closes in on one.
+// the buzz of fireflies, which gets louder as the frog closes in on one, and splashing while
+// the frog swims.
 import ambientUrl from './assets/sounds/ambient.mp3?url'
 import croakUrl from './assets/sounds/croak.mp3?url'
 import buzzingUrl from './assets/sounds/buzzing.mp3?url'
+import swimmingUrl from './assets/sounds/swimming.mp3?url'
 
 const ambientVolume = 0.25;
 const croakVolume = 0.4;
 // The buzz starts this far from the nearest firefly (meters) and is loudest right next to it.
 const buzzRange = 5;
 const buzzVolume = 0.6;
+const swimVolume = 0.5;
+// The splashing eases in as the frog slips into the water and trails off after it climbs out.
+const swimFadeIn = 0.5;
+const swimFadeOut = 1.2;
 // How quickly the background fades in and out when a game starts or the menu opens (seconds).
 const fade = 0.6;
 
@@ -17,6 +23,8 @@ export function createSwampSound() {
   let ambient = null;
   let croak = null;
   let buzz = null;
+  let swim = null;
+  let swimming = false;
   let playing = false;
   let buzzLevel = 0;
 
@@ -39,10 +47,10 @@ export function createSwampSound() {
     return gain;
   }
 
-  function fadeTo(gain, volume) {
+  function fadeTo(gain, volume, seconds = fade) {
     if (!gain) return;
     gain.gain.cancelScheduledValues(context.currentTime);
-    gain.gain.setTargetAtTime(volume, context.currentTime, fade / 3);
+    gain.gain.setTargetAtTime(volume, context.currentTime, seconds / 3);
   }
 
   // Browsers only allow sound after the player has done something, so start on the first input.
@@ -61,6 +69,10 @@ export function createSwampSound() {
     });
     loop(buzzingUrl).then((gain) => {
       buzz = gain;
+    });
+    loop(swimmingUrl).then((gain) => {
+      swim = gain;
+      if (swimming) fadeTo(swim, swimVolume, swimFadeIn);
     });
   }
 
@@ -91,6 +103,12 @@ export function createSwampSound() {
       playing = on;
       fadeTo(ambient, on ? ambientVolume : 0);
       fadeTo(croak, on ? croakVolume : 0);
+    },
+    // Splashing only while the swim model is showing (the frog is in the water).
+    setSwimming(on) {
+      if (on === swimming) return;
+      swimming = on;
+      fadeTo(swim, on ? swimVolume : 0, on ? swimFadeIn : swimFadeOut);
     },
     // Call every frame with the distance to the nearest flying firefly (Infinity for none).
     setNearestFirefly(distance) {

@@ -1294,6 +1294,7 @@ renderer.setAnimationLoop(() => {
 
   updateFrogWater(elapsed, moved > 0);
   showFrogModel();
+  swampSound.setSwimming(Boolean(swimFrog?.visible) && !menuOpen && !frogExploded);
   explosion?.update(delta);
   if (frogExploded) {
     updateRespawn(delta);
